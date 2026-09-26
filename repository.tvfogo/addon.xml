@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="repository.gloriosotv" name="[B][COLOR red]Repositório [COLOR orange]Glorioso Tv[/COLOR][/B]" version="1.0.0" provider-name="glorioso tv">
-  <extension point="xbmc.addon.repository" name="glorioso-tv.github.io Add-on Repository">
+<addon id="repository.tvfogo" name="[B][COLOR red]Repositório [COLOR orange]Tv Fogo[/COLOR][/B]" version="1.0.0" provider-name="tv fogo">
+  <extension point="xbmc.addon.repository" name="Repository Tv Fogo">
     <dir>
       <info compressed="false">https://raw.githubusercontent.com/tv-fogo/tv-fogo.github.io/heads/main/repo/addons.xml</info>
       <checksum>https://raw.githubusercontent.com/tv-fogo/tv-fogo.github.io/heads/main/repo/addons.xml.md5</checksum>
@@ -9,8 +9,8 @@
   </extension>
 
   <extension point="xbmc.addon.metadata">
-    <summary lang="pt_BR">Repositório oficial glorioso tv</summary>
-    <description lang="pt_BR">Repositório para distribuição automática dos addons glorioso tv.</description>
+    <summary lang="pt_BR">Repositório oficial tv fogo</summary>
+    <description lang="pt_BR">Repositório para distribuição automática dos addons tv fogo.</description>
     <platform>all</platform>
     <assets>
       <icon>icon.png</icon>
