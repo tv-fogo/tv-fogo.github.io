@@ -42,7 +42,7 @@ class GeradorDeRepositorio:
         
         zip_name = ""
         try:
-            repo_addon_id = "repository.gloriosotv"
+            repo_addon_id = "repository.tvfogo"
             repo_addon_path = os.path.join(self.caminho_zips, repo_addon_id)
             
             with open(os.path.join(repo_addon_path, "addon.xml"), "r", encoding="utf-8") as f:
