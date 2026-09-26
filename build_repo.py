@@ -4,7 +4,6 @@ import hashlib
 import zipfile
 import re
 import shutil
-import subprocess
 
 class GeradorDeRepositorio:
     """
@@ -16,25 +15,40 @@ class GeradorDeRepositorio:
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.caminho_repo = os.path.join(self.base_dir, "repo")
         self.caminho_zips = os.path.join(self.base_dir, "repo", "zips")
+        self.caminho_addon_repo_origem = os.path.join(self.base_dir, "repository.tvfogo")
+        self.caminho_addon_repo_destino = os.path.join(self.caminho_zips, "repository.tvfogo")
         self.caminho_addons_xml = os.path.join(self.base_dir, "repo", "addons.xml")
         self.caminho_addons_xml_md5 = os.path.join(self.base_dir, "repo", "addons.xml.md5")
 
         print(f"Diretório base: {self.base_dir}")
 
         self._garantir_estrutura_repo()
+        self._sincronizar_addon_repositorio()
         self._compactar_addons()
         self._gerar_arquivo_addons()
         self._gerar_arquivo_md5()
         self._finalizar_repo()
-        
-        # Passo extra: Força o Git a reconhecer os arquivos
-        self._git_force_add()
         
         print("\nArquivos do repositório gerados com sucesso!")
 
     def _garantir_estrutura_repo(self):
         """Garante que a estrutura do repositório exista antes da geração."""
         os.makedirs(self.caminho_zips, exist_ok=True)
+
+    def _sincronizar_addon_repositorio(self):
+        """Usa os arquivos da raiz como fonte do addon do repositório."""
+        if not os.path.isdir(self.caminho_addon_repo_origem):
+            raise FileNotFoundError(
+                f"Pasta fonte do repositório não encontrada: {self.caminho_addon_repo_origem}"
+            )
+
+        shutil.copytree(
+            self.caminho_addon_repo_origem,
+            self.caminho_addon_repo_destino,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("*.zip"),
+        )
+        print("Arquivos do addon repository.tvfogo sincronizados da raiz.")
 
     def _finalizar_repo(self):
         """Copia o zip do repositório para a pasta raiz e atualiza o index.html."""
@@ -77,9 +91,16 @@ class GeradorDeRepositorio:
                 with open(index_path, "r", encoding="utf-8") as f:
                     html = f.read()
                 
-                # Atualiza o link href e o texto do botão para o nome do arquivo
-                html = re.sub(r'href="repository\.gloriosotv-.*?\.zip"', f'href="{zip_name}"', html)
-                html = re.sub(r'>repository\.gloriosotv-.*?\.zip<', f'>{zip_name}<', html)
+                html = re.sub(
+                    r'href="repository\.tvfogo-[^"]+\.zip"',
+                    f'href="{zip_name}"',
+                    html,
+                )
+                html = re.sub(
+                    r'>repository\.tvfogo-[^<]+\.zip<',
+                    f'>{zip_name}<',
+                    html,
+                )
                 
                 with open(index_path, "w", encoding="utf-8") as f:
                     f.write(html)
@@ -183,16 +204,6 @@ class GeradorDeRepositorio:
             print(f"MD5 gerado: {m}")
         except Exception as e:
             print(f"ERRO no MD5: {e}")
-
-    def _git_force_add(self):
-        """Força a adição dos arquivos da pasta repo ao Git, ignorando o .gitignore"""
-        try:
-            print("\nExecutando GIT ADD forçado na pasta repo...")
-            # Adiciona a pasta repo inteira, forçando a inclusão de zips ignorados
-            subprocess.check_call(['git', 'add', '--force', 'repo'], cwd=self.base_dir)
-            print("  [SUCESSO] Arquivos adicionados ao stage do Git.")
-        except Exception as e:
-            print(f"  [AVISO] Não foi possível executar git add: {e}")
 
 if __name__ == "__main__":
     GeradorDeRepositorio()
