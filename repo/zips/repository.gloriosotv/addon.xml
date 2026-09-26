@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<addon id="repository.gloriosotv" name="[B][COLOR red]Repositório [COLOR orange]Glorioso Tv[/COLOR][/B]" version="1.0.0" provider-name="glorioso tv">
+  <extension point="xbmc.addon.repository" name="glorioso-tv.github.io Add-on Repository">
+    <dir>
+      <info compressed="false">https://glorioso-tv.github.io/repo/addons.xml</info>
+      <checksum>https://glorioso-tv.github.io/repo/addons.xml.md5</checksum>
+      <datadir zip="true">https://glorioso-tv.github.io/repo/zips/</datadir>
+    </dir>
+  </extension>
+
+  <extension point="xbmc.addon.metadata">
+    <summary lang="pt_BR">Repositório oficial glorioso tv</summary>
+    <description lang="pt_BR">Repositório para distribuição automática dos addons glorioso tv.</description>
+    <platform>all</platform>
+    <assets>
+      <icon>icon.png</icon>
+      <fanart>fanart.jpg</fanart>
+    </assets>
+    <license>MIT</license>
+    <source>https://github.com/glorioso-tv/glorioso-tv.github.io</source>
+  </extension>
+</addon>

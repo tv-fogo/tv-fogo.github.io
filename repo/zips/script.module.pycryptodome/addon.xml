@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.module.pycryptodome"
+       name="PyCryptodome"
+       version="3.20.0"
+       provider-name="Legrandin">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.module"
+             library="lib" />
+  <extension point="xbmc.addon.metadata">
+    <summary>Cryptographic library for Python</summary>
+    <source>https://www.pycryptodome.org</source>
+    <platform>all</platform>
+    <license>Public domain</license>
+  </extension>
+</addon>
