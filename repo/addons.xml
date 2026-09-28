@@ -350,6 +350,29 @@
   </extension>
 </addon>
 
+<addon id="plugin.video.doramas" name="Seu Dorama" version="1.1.0" provider-name="Henr1que moraes">
+  <requires>
+    <import addon="xbmc.python" version="3.0.1" />
+    <import addon="script.module.resolveurl" version="5.1.140" optional="true" />
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="main.py">
+    <provides>video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="pt_BR">Navegue pelo catálogo de doramas do Seu Dorama.</summary>
+    <description lang="pt_BR">Acesse doramas, gêneros e episódios recentes do Seu Dorama.</description>
+    <platform>all</platform>
+	  <assets>
+			<icon>icon.png</icon>
+		</assets>
+		<license>GPL-3.0-or-later</license>
+    <news>1.1.0
+- Migração do catálogo para o Seu Dorama.
+- Navegação por doramas, gêneros e episódios recentes.
+- Detecção de episódios e imagens nas páginas da nova fonte.</news>
+  </extension>
+</addon>
+
 <addon id="plugin.video.xvideos"
 version="1.3"
 name="Xvideos"
