@@ -56,9 +56,9 @@ def convert_to_m3u8(url):
 
 def player_hlsretry(name,url,iconimage,description):
     if name:
-        name = 'GLORIOSO TV - HLSRETRY - ' + name
+        name = 'Tv Fogo - HLSRETRY - ' + name
     else:
-        name = 'GLORIOSO TV - HLSRETRY'
+        name = 'Tv Fogo - HLSRETRY'
     url = unquote_plus(url)
     url = convert_to_m3u8(url)
     url = 'http://%s:%s/?url=%s'%(str(hlsretry.HOST_NAME),str(hlsretry.PORT_NUMBER),quote(url))
@@ -72,9 +72,9 @@ def player_hlsretry(name,url,iconimage,description):
 
 def player_tsdownloader(name,url,iconimage,description):
     if name:
-        name = 'GLORIOSO TV - TSDOWNLOADER - ' + name
+        name = 'Tv Fogo - TSDOWNLOADER - ' + name
     else:
-        name = 'GLORIOSO TV - TSDOWNLOADER'
+        name = 'Tv Fogo - TSDOWNLOADER'
     url = unquote_plus(url)
     url = url.replace('.m3u8', '')
     url = 'http://%s:%s/?url=%s'%(str(tsdownloader.HOST_NAME),str(tsdownloader.PORT_NUMBER),quote(url))
@@ -100,9 +100,9 @@ def player_input(name, url, iconimage, description):
     dns_resolver = DNSOverride()
 
     if name:
-        name = "GLORIOSO TV - INPUTSTREAM FFMPEGDIRECT - " + name
+        name = "Tv Fogo - INPUTSTREAM FFMPEGDIRECT - " + name
     else:
-        name = "GLORIOSO TV - INPUTSTREAM FFMPEGDIRECT"
+        name = "Tv Fogo - INPUTSTREAM FFMPEGDIRECT"
 
     exts = (".mp4", ".mp3", ".mkv", ".avi", ".rmvb")
     if not any(ext in url.lower() for ext in exts):
@@ -351,7 +351,7 @@ def monitor():
 
 def proxy2_thread(name,iconImage,url_to_play):
     if not name:
-        name = 'GLORIOSO TV'
+        name = 'Tv Fogo'
     name = name + ' - Proxy 2'
     try:
         media_url = server.extract_media_url(url_to_play)
@@ -391,11 +391,11 @@ def run(params):
     iconimage = params.get(
         "iconImage", params.get("thumbnailImage", addonIcon)
     )
-    name = params.get("name", "GLORIOSO TV")
+    name = params.get("name", "Tv Fogo")
     url = params.get("url", "")
     description = params.get("description", "")
     if not url:
-        dialog("GLORIOSO TV PLAYER")
+        dialog("Tv Fogo PLAYER")
         return
 
     stream_type = (stream_type or "").upper()

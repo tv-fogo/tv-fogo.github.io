@@ -43,7 +43,7 @@ try:
     # Kodi setar abort (fechar/reiniciar), encerrando tudo limpo.
     server(monitor=monitor)
 finally:
-    log_fim = "[customdns] service.py do Glorioso TV finalizado."
+    log_fim = "[customdns] service.py do Tv Fogo finalizado."
     try:
         xbmc.log(log_fim, getattr(xbmc, 'LOGINFO', 1))
     except Exception:

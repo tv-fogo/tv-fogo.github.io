@@ -65,7 +65,7 @@ def is_enabled():
     if _enabled is None or (now - _checked_at) > _CHECK_INTERVAL:
         try:
             import xbmcaddon
-            enabled = xbmcaddon.Addon('plugin.video.gloriosotv').getSetting('force_https')
+            enabled = xbmcaddon.Addon('plugin.video.tvfogo').getSetting('force_https')
             _enabled = (enabled != 'false')  # default/'' = ligado
         except Exception:
             _enabled = True
@@ -77,7 +77,7 @@ def is_strict_https():
     """Impede reproducao sem TLS quando a protecao estrita esta ativa."""
     try:
         import xbmcaddon
-        value = xbmcaddon.Addon('plugin.video.gloriosotv').getSetting('strict_https')
+        value = xbmcaddon.Addon('plugin.video.tvfogo').getSetting('strict_https')
         return value != 'false'
     except Exception:
         return True

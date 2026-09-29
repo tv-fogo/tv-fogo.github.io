@@ -5,7 +5,7 @@ try:
     from YDStreamExtractor import getVideoInfo
     from YDStreamExtractor import handleDownload
 except Exception:
-    xbmcgui.Dialog().notification("plugin.video.gloriosotv", "Please [COLOR yellow]install Youtube-dl[/COLOR] module", "", 10000, False)
+    xbmcgui.Dialog().notification("plugin.video.tvfogo", "Please [COLOR yellow]install Youtube-dl[/COLOR] module", "", 10000, False)
 
 
 def single_YD(url, download=False, dl_info=False, audio=False):

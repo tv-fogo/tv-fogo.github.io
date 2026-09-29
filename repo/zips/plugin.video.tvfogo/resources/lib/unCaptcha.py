@@ -4,7 +4,7 @@ import re
 from six.moves import urllib_parse, urllib_request
 from kodi_six import xbmcaddon, xbmcgui
 import os
-__scriptID__ = 'plugin.video.gloriosotv'
+__scriptID__ = 'plugin.video.tvfogo'
 __addon__ = xbmcaddon.Addon(__scriptID__)
 
 
