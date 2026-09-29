@@ -391,6 +391,41 @@ Agora compatível com o Kodi 21.3 e versões superiores.
   </extension>
 </addon>
 
+<addon id="plugin.video.tvfogo" version="1.1.10" name="[B][COLOR chocolate]Tv Fogo[/COLOR][/B]" provider-name="[B][COLOR yellow]Henrique Castro[/COLOR][/B]">
+	<requires>
+		<import addon="script.module.beautifulsoup4" />
+		<import addon="script.module.six" />
+		<import addon="script.module.kodi-six" />
+		<import addon="script.module.requests-cache"/>
+		<import addon="script.module.requests"/>
+                <import addon="script.module.inputstreamhelper" />
+                <import addon="script.module.websocket"  />
+                <import addon="script.module.cloudscraper" />
+                <import addon="script.module.urllib3" />
+                <import addon="script.module.dateutil" />
+                <import addon="script.module.resolveurl" />
+		<import addon="script.module.youtube.dl" optional="true"/>
+		<import addon="plugin.video.youtube" optional="true" />
+		<import addon="script.module.urlresolver" optional="true"/>
+		<import addon="script.module.slproxy" optional="true" />
+	</requires>
+	<extension point="xbmc.python.pluginsource" library="default.py">
+		<provides>video</provides>
+	</extension>
+
+	<extension point="xbmc.service" library="service.py"/>
+
+	<extension point="xbmc.addon.metadata">
+		<summary>[B][COLOR chocolate]OBRIGADO POR USAR NOSSO ADD-ON[/COLOR][/B]</summary>
+		<description>[B][COLOR chocolate]Tv Fogo é apenas um AGREGADOR de links e, assim como o Google.com, apenas agrega e organiza os links externos. Não somos responsáveis pelos arquivos aqui encontrados.[/COLOR][/B]</description>
+		<platform>all</platform>
+		<assets>
+			<icon>icon.png</icon>
+			<fanart>fanart.jpg</fanart>
+		</assets>
+	</extension>
+</addon>
+
 <addon id="script.module.inputstreamhelper" name="InputStream Helper" version="0.8.5" provider-name="emilsvennesson, dagwieers, mediaminister, horstle">
   <requires>
     <!--py3 compliant-->
