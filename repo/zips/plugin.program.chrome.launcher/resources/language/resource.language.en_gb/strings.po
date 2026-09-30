@@ -1,0 +1,76 @@
+# Kodi Media Center language file
+# Addon Name: Browser Launcher
+# Addon id: plugin.program.chrome.launcher
+# Addon Provider: AddonScriptorDE
+msgid ""
+msgstr ""
+"Project-Id-Version: Kodi Addons\n"
+"Report-Msgid-Bugs-To: translations@kodi.tv\n"
+"PO-Revision-Date: 2026-09-30 00:00+0000\n"
+"Last-Translator: AddonScriptorDE\n"
+"Language-Team: English (https://kodi.weblate.cloud/languages/en_gb/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en_GB\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgctxt "#30001"
+msgid "Add Website"
+msgstr ""
+
+msgctxt "#30002"
+msgid "Remove Website"
+msgstr ""
+
+msgctxt "#30003"
+msgid "Title"
+msgstr ""
+
+msgctxt "#30004"
+msgid "URL"
+msgstr ""
+
+msgctxt "#30005"
+msgid "Selected browser not found"
+msgstr ""
+
+msgctxt "#30006"
+msgid "Edit Website Settings"
+msgstr ""
+
+msgctxt "#30009"
+msgid "Stop Kodi playback?"
+msgstr ""
+
+msgctxt "#30010"
+msgid "Use custom browser/script path"
+msgstr ""
+
+msgctxt "#30011"
+msgid "Browser/script path"
+msgstr ""
+
+msgctxt "#30012"
+msgid "Use own user profile (Could take some time on first start)"
+msgstr ""
+
+msgctxt "#30013"
+msgid "General"
+msgstr ""
+
+msgctxt "#30016"
+msgid "Use kiosk mode?"
+msgstr ""
+
+msgctxt "#30017"
+msgid "Browser"
+msgstr ""
+
+msgctxt "#30018"
+msgid "Firefox"
+msgstr ""
+
+msgctxt "#30019"
+msgid "Google Chrome"
+msgstr ""
