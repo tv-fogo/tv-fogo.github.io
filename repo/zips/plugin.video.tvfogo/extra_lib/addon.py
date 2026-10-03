@@ -106,7 +106,6 @@ def player_input(name, url, iconimage, description):
 
     exts = (".mp4", ".mp3", ".mkv", ".avi", ".rmvb")
     if not any(ext in url.lower() for ext in exts):
-        url = convert_to_m3u8(url)
         if ".m3u8" in url or ".ts" in url or "format=ts" in url or ".ism" in url:
             plugin = xbmcvfs.translatePath(
                 "special://home/addons/inputstream.ffmpegdirect"
@@ -128,7 +127,7 @@ def player_input(name, url, iconimage, description):
                     headers += "&Connection=keep-alive"
                 url = f"{base_url}|{headers}"
             else:
-                user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+                user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
                 url = f"{url}|User-Agent={user_agent}&Connection=keep-alive"
 
             play_item = xbmcgui.ListItem(path=url)

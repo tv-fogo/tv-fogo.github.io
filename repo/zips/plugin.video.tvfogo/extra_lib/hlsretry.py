@@ -616,6 +616,7 @@ class XtreamCodes:
         global CHECK_URL_PARAMS
         if '.ts' in url or ('/hl' in url and '.ts' not in url):
             self_server.send_header('Content-type','video/mp2t')
+            self_server.send_header('Connection', 'close')
             self_server.end_headers()            
             if url.startswith('/') and not '/hl' in url:
                 url = url[1:]
@@ -629,13 +630,18 @@ class XtreamCodes:
             else:
                 ts = url
             sent_any = False
-            for i in range(MAX_RETRY):
-                count = i + 1
+            media_path = urlparse(ts).path.lower()
+            is_live_stream = (
+                not self_server.is_hls_resource
+                and '/live/' in media_path
+                and media_path.endswith('.ts')
+            )
+            retries = 0
+            while retries < MAX_RETRY:
                 if STOP_SERVER:
                     break              
-                # if count == MAX_RETRY - 4:
-                #     notify('Canal ruim, tente outro canal ou lista')
                 client_gone = False
+                received_chunk = False
                 r = None
                 try:
                     header_ = self.update_headers()
@@ -645,31 +651,36 @@ class XtreamCodes:
                     log('Status Code: %s'%str(code))
                     if code == 200:
                         CACHE_CHUNKS = []
-                        for chunk in r.iter_content(50*1024):                      
+                        for chunk in r.iter_content(50*1024):
+                            if not chunk:
+                                continue
                             try:
                                 self_server.conn.sendall(chunk)
                                 sent_any = True
+                                received_chunk = True
+                                retries = 0
                                 CACHE_CHUNKS.append(chunk)
-                            except:
+                            except OSError:
                                 # o player fechou a conexão: para de baixar
                                 client_gone = True
                                 break
-                        break
+                        if client_gone or not is_live_stream:
+                            break
+                        if not received_chunk:
+                            retries += 1
                     else:
-                        if i == 0:
+                        if retries == 0:
                             DELAY_MODE = False
-                        # antes reenviava CACHE_CHUNKS[-1] aqui, o que repetia
-                        # dados no meio do video e corrompia a imagem.
-                        # Agora apenas espera um pouco e tenta o segmento de novo.
-                        time.sleep(0.5)
+                        retries += 1
 
                 except requests.exceptions.RequestException as exc:
-                    # se já enviou parte do segmento, repetir duplicaria dados
-                    if sent_any:
+                    # Não repetir segmentos HLS parcialmente enviados; em streams
+                    # ao vivo, reconectar mantém a reprodução após queda upstream.
+                    if sent_any and not is_live_stream:
                         break
-                    if count == MAX_RETRY:
+                    retries += 1
+                    if retries == MAX_RETRY:
                         log('Falha ao carregar segmento (%s)' % type(exc).__name__)
-                    time.sleep(0.5)
                 finally:
                     if r is not None:
                         try:
@@ -678,6 +689,7 @@ class XtreamCodes:
                             pass
                 if client_gone:
                     break
+                time.sleep(0.5)
 
     def parse_url(self,url):
         parsed_url = urlparse(url)

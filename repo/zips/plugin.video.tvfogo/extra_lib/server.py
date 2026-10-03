@@ -205,6 +205,8 @@ class handler(SimpleHTTPRequestHandler):
             url = url.split('&h123')[0]
         # if '&' in url:
         #     url = url.split('&')[0]
+        if urlparse(url).path.lower().endswith('.ts'):
+            return url
         if not '.m3u8' in url and not '/hl' in url and int(url.count("/")) > 4 and not '.mp4' in url and not '.avi' in url:
             parsed_url = urlparse(url)
             try:
@@ -303,7 +305,7 @@ class handler(SimpleHTTPRequestHandler):
             request_headers['Range'] = byte_range
 
         response = None
-        for attempt in range(2):
+        for attempt in range(3):
             if STOP_SERVER:
                 return
             try:
@@ -317,10 +319,19 @@ class handler(SimpleHTTPRequestHandler):
                         url, headers=request_headers, stream=True,
                         timeout=(10, 30), verify=False
                     )
+                if response.status_code == 409 and attempt < 2:
+                    response.close()
+                    response = None
+                    self.log_error(
+                        "TS proxy upstream returned HTTP 409; retrying (%s/3)",
+                        attempt + 1
+                    )
+                    time.sleep(0.5)
+                    continue
                 break
             except requests.RequestException as exc:
                 self.log_error("TS proxy upstream request failed (%s)", type(exc).__name__)
-                if attempt == 0:
+                if attempt < 2:
                     time.sleep(0.5)
 
         if response is None:
