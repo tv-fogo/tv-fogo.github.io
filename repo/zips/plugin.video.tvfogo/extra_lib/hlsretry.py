@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import socket
 import threading
+import time
 import six
 if six.PY3:
-    from urllib.parse import urlparse, parse_qs, quote, unquote, unquote_plus, quote_plus
+    from urllib.parse import urlparse, urljoin, parse_qs, quote, unquote, unquote_plus, quote_plus
 else:
-    from urlparse import urlparse, parse_qs
+    from urlparse import urlparse, urljoin, parse_qs
     from urllib import quote, unquote, unquote_plus, quote_plus, quote
 try:
     from .helper import os, notify, log as log2
@@ -28,7 +29,6 @@ import requests
 import logging
 import base64
 import random
-import binascii 
 try:
     from extra_lib.dnscompat import DNSOverride
 except:
@@ -39,10 +39,37 @@ except:
     from secureurl import patch_requests as _patch_requests_https
 _patch_requests_https()
 DNSOverride()
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Session criada DEPOIS do patch do secureurl, para herdar o que ele alterar
+SESSION = requests.Session()
+
+def reset_session():
+    """Descarta cookies/conexoes da sessao anterior e cria uma nova."""
+    global SESSION
+    try:
+        SESSION.close()
+    except:
+        pass
+    SESSION = requests.Session()
+
+def http_get(url, **kwargs):
+    """GET usando a Session. Se der erro de SSL, tenta o requests.get normal
+    (que passa pelo patch do secureurl)."""
+    try:
+        return SESSION.get(url, **kwargs)
+    except requests.exceptions.SSLError:
+        return requests.get(url, **kwargs)
+
+def http_head(url, **kwargs):
+    """HEAD usando a Session, com a mesma protecao de SSL."""
+    try:
+        return SESSION.head(url, **kwargs)
+    except requests.exceptions.SSLError:
+        return requests.head(url, **kwargs)
+
 # habilita ou desabilita o uso de IP falso
+# (desligado: IP falso diferente a cada requisicao quebra servidores com token)
 USE_FAKE_IP = True
 
 def get_local_ip():
@@ -91,6 +118,8 @@ global URL_BASE_PARAMS
 global CHECK_URL_PARAMS
 global URL_BASE_STALKER
 global TOKEN_STALKER
+global FAKE_IP_SESSION
+global LAST_CHANNEL
 MAX_RETRY = 28
 DELAY_MODE = True
 URL_BASE = ''
@@ -107,16 +136,56 @@ CHECK_URL_PARAMS = True
 URL_BASE_STALKER = ''
 TOKEN_STALKER = ''
 NSPLAYER = False
+FAKE_IP_SESSION = ''
+LAST_CHANNEL = ''
 
 # permite ativar/desativar sistema de IP falso
 USE_FAKE_IP = True
+
+
+def normalize_url(url):
+    """Remove sufixos usados para forçar canal/segmento e deixa a URL limpo."""
+    if not url:
+        return url
+    for sep in ('|', '%7C'):
+        if sep in url:
+            url = url.split(sep)[0]
+    return url
+
+
+def reset_channel_state():
+    """Limpa o estado do canal atual sem afetar o restante do proxy."""
+    global URL_BASE, LAST_URL, HEADERS_BASE, CACHE_CHUNKS, CACHE_M3U8, DELAY_MODE
+    global RESOLUTION, LAST_M3U8, PARAMS, URL_BASE_PARAMS, CHECK_URL_PARAMS
+    global URL_BASE_STALKER, TOKEN_STALKER, FAKE_IP_SESSION, LAST_CHANNEL
+
+    URL_BASE = ''
+    LAST_URL = ''
+    HEADERS_BASE = {}
+    CACHE_CHUNKS = []
+    CACHE_M3U8 = ''
+    DELAY_MODE = True
+    RESOLUTION = True
+    LAST_M3U8 = ''
+    PARAMS = ''
+    URL_BASE_PARAMS = ''
+    CHECK_URL_PARAMS = True
+    URL_BASE_STALKER = ''
+    TOKEN_STALKER = ''
+    FAKE_IP_SESSION = ''
+    LAST_CHANNEL = ''
+
 
 # função para gerar IP aleatório (rede privada, imitando brasileira)
 # já existia gerar_ip_brasileiro, mas expomos para facilitar uso
 
 def get_fake_ip():
-    """Retorna um IP aleatório da faixa privada (padrão usado como fake)."""
-    return gerar_ip_brasileiro()  # mantém compatibilidade
+    """Retorna um IP aleatório da faixa privada (padrão usado como fake).
+    O mesmo IP é mantido durante toda a sessão (até o /reset)."""
+    global FAKE_IP_SESSION
+    if not FAKE_IP_SESSION:
+        FAKE_IP_SESSION = gerar_ip_brasileiro()  # mantém compatibilidade
+    return FAKE_IP_SESSION
 
 
 def gerar_ip_brasileiro():
@@ -138,15 +207,23 @@ class XtreamCodes:
         global HEADERS_BASE
         global NSPLAYER
         global USE_FAKE_IP
-        header = HEADERS_BASE
+        # cópia do dicionário global: antes alterava HEADERS_BASE direto,
+        # que é compartilhado entre as threads do proxy
+        header = dict(HEADERS_BASE)
+        # User-Agent fixo da sessão: o que veio na URL (se houver) ou o padrão.
+        # Antes era sobrescrito a cada requisição.
+        header.setdefault('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36')
         # cabeçalhos padrão básicos
-        header.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive'})
+        header.update({'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive'})
         # se habilitado, adiciona IP falso em vários campos comuns
         if USE_FAKE_IP:
             fake_ip = get_fake_ip()
             header.update({'X-Forwarded-For': fake_ip, 'Client-IP': fake_ip, 'X-Real-IP': fake_ip})
         if NSPLAYER == True:
-            header['User-Agent'] = binascii.b2a_hex(os.urandom(20))[:32]
+            # antes: User-Agent aleatório (binascii.b2a_hex(os.urandom(20))[:32])
+            # a cada falha, o que fazia o servidor ver aparelhos diferentes.
+            # Agora mantém o mesmo User-Agent da sessão.
+            pass
         return header
 
 
@@ -156,24 +233,18 @@ class XtreamCodes:
         return p[i:]
     
     def convert_to_m3u8(self,url):
-        if '|' in url:
-            url = url.split('|')[0]
-        elif '%7C' in url:
-            url = url.split('%7C')[0]
+        url = normalize_url(url)
+        if urlparse(url).path.lower().endswith('.ts'):
+            return url
         if not '.m3u8' in url and not '/hl' in url and int(url.count("/")) > 4 and not '.mp4' in url and not '.avi' in url:
             parsed_url = urlparse(url)
             try:
                 host_part1 = '%s://%s'%(parsed_url.scheme,parsed_url.netloc)
                 host_part2 = url.split(host_part1)[1]
-                url = host_part1 + '/live' + host_part2
-                file = self.basename(url)
-                if '.ts' in file:
-                    file_new = file.replace('.ts', '.m3u8')
-                    url = url.replace(file, file_new)
-                else:
-                    url = url + '.m3u8'
-                    # file_new = file + '.m3u8'
-                    # new_url = url.replace(file, file_new)
+                if not host_part2.startswith('/live/'):
+                    host_part2 = '/live' + host_part2
+                url = host_part1 + host_part2
+                url = url + '.m3u8'
             except:
                 pass
         return url 
@@ -255,9 +326,12 @@ class XtreamCodes:
             if not PARAMS:
                 for i in range(7):
                     DNSOverride()
-                    r = requests.get(url,headers=header_, timeout=3, verify=False)
+                    r = http_get(url,headers=header_, timeout=3, verify=True)
                     if r.status_code == 200:
                         url = r.url
+                        # antes não parava aqui e repetia o mesmo GET 7 vezes
+                        # (gastando conexões do login)
+                        break
                     else:
                         break
         except:
@@ -277,7 +351,7 @@ class XtreamCodes:
         try:
             for i in range(7):
                 DNSOverride()
-                r = requests.get(url,headers=header_, timeout=3, verify=False)
+                r = http_get(url,headers=header_, timeout=3, verify=True)
                 if r.status_code == 200:
                     url = r.url
                     break
@@ -310,9 +384,9 @@ class XtreamCodes:
             url = URL_BASE_PARAMS + self.get_filename_params(url)
             if '.m3u8' in url and CHECK_URL_PARAMS:
                 try:
-                    header_ = HEADERS_BASE
+                    header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(url,headers=header_,timeout=3,verify=False)
+                    r = http_get(url,headers=header_,timeout=3,verify=True)
                     if r.status_code == 200:
                         CHECK_URL_PARAMS = False
                         return url
@@ -361,18 +435,56 @@ class XtreamCodes:
         return url
 
     def get_max_m3u8(self,src):
-        global URL_BASE
-        try:
-            regex1 = r"RESOLUTION=(\d+x\d+).*\n(.+\.m3u8.+)"
-            regex2 = r"RESOLUTION=(\d+x\d+).*\n(.+\.m3u8)"
-            matches = re.findall(regex1, src)
-            if not matches:
-                matches = re.findall(regex2, src)
-            max_resolution_url = max(matches, key=lambda x: tuple(map(int, x[0].split('x'))))
-            url = URL_BASE + max_resolution_url[1]
-        except:
-            url = ''
-        return url
+        return self.get_max_m3u8_url(src, URL_BASE)
+
+    def get_max_m3u8_url(self,src,base_url):
+        variants = []
+        lines = src.splitlines()
+        for index, line in enumerate(lines[:-1]):
+            match = re.search(r'RESOLUTION=(\d+)x(\d+)', line)
+            if not match:
+                continue
+            variant_uri = lines[index + 1].strip()
+            if not variant_uri or variant_uri.startswith('#'):
+                continue
+            resolution = (int(match.group(1)), int(match.group(2)))
+            variants.append((resolution, variant_uri))
+        if not variants:
+            return ''
+        _, variant_uri = max(variants, key=lambda variant: variant[0])
+        return urljoin(base_url, variant_uri)
+
+    def proxy_m3u8(self,src,playlist_url):
+        proxy_prefix = 'http://%s:%s/?url=' % (HOST_NAME, PORT_NUMBER)
+
+        def proxied_url(uri):
+            uri = uri.strip()
+            if not uri:
+                return uri
+            resolved = urljoin(playlist_url, uri)
+            if urlparse(resolved).scheme not in ('http', 'https'):
+                return uri
+            return proxy_prefix + quote(resolved, safe='') + '&hls=1'
+
+        rewritten = []
+        uri_attribute = re.compile(r"URI=(['\"])(.*?)\1", re.IGNORECASE)
+        for line in src.splitlines(True):
+            content = line.rstrip('\\r\\n')
+            ending = line[len(content):]
+            stripped = content.strip()
+            if stripped.startswith('#'):
+                content = uri_attribute.sub(
+                    lambda match: 'URI=%s%s%s' % (
+                        match.group(1), proxied_url(match.group(2)), match.group(1)
+                    ),
+                    content
+                )
+            elif stripped:
+                leading = content[:len(content) - len(content.lstrip())]
+                trailing = content[len(content.rstrip()):]
+                content = leading + proxied_url(stripped) + trailing
+            rewritten.append(content + ending)
+        return ''.join(rewritten)
 
     # funcao m3u8 principal
     def send_m3u8(self,self_server,url):
@@ -390,14 +502,7 @@ class XtreamCodes:
         global URL_BASE_PARAMS
         global CHECK_URL_PARAMS
         global NSPLAYER
-        try:
-            url = url.split('|')[0]
-        except:
-            pass
-        try:
-            url = url.split('%7C')[0]
-        except:
-            pass
+        url = normalize_url(url)
         if '.m3u8' in url or '.php' in url:
             self_server.send_header('Content-Type', 'application/x-mpegURL')
             self_server.end_headers() 
@@ -433,45 +538,39 @@ class XtreamCodes:
                     break
                 # if count == MAX_RETRY - 4:
                 #     notify('Canal ruim, tente outro canal ou lista')
-                log('URL POS PROCESSAMENTO: %s'%url)
                 header_ = self.update_headers()
-                if RESOLUTION:                  
+                if RESOLUTION and not self_server.is_hls_resource:
                     try:                         
                         DNSOverride()
-                        r = requests.get(url,headers=header_, allow_redirects=True, timeout=2, verify=False)
+                        r = http_get(url,headers=header_, allow_redirects=True, timeout=4, verify=True)
                         code = r.status_code
                         log('Status Code: %s'%str(code))
                         if code == 200:
                             src = r.text
                             if '.m3u8' in src and 'RESOLUTION' in src:
-                                url = self.get_max_m3u8(src)
-                                log('URL DO GET MAX M3U8: %s'%url)
+                                url = self.get_max_m3u8_url(src, r.url)
                                 LAST_M3U8 = url
                     except:
                         pass
                     RESOLUTION = False
-                if LAST_M3U8:
+                if LAST_M3U8 and not self_server.is_hls_resource:
                     url = LAST_M3U8
-                    log('URL DO LAST M3U8: %s'%url)
                 if PARAMS and not '?' in url:
                     url = url + PARAMS
-                    log('URL DO PARAMS: %s'%url)
                 try:
-                    log('URL FINAL DO M3U: %s'%url)                      
                     DNSOverride()
-                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=4, verify=False)
+                    r = http_get(url,headers=header_, allow_redirects=True, timeout=6, verify=True)
                     code = r.status_code
-                    log('TESTE DO JOEL')
-                    log('HEADERS: %s'%str(header_))
-                    log('URL M3U8: %s'%str(url))
                     log('Status Code: %s'%str(code))
                     
                     if code == 200:
                         NSPLAYER = False
                         src = r.text
-                        if 'http' in src:
-                            url_proxy = 'http://%s:%s/?url=http'%(HOST_NAME,PORT_NUMBER)
-                            src = src.replace('http',url_proxy)
+                        if not src.lstrip('\ufeff \r\n').startswith('#EXTM3U'):
+                            logger.warning(
+                                'Resposta HTTP 200 nao contem uma playlist HLS valida'
+                            )
+                        src = self.proxy_m3u8(src, r.url)
                         if '/live/' in url and url.count('/') == 6:
                             try:
                                 CACHE_M3U8 = self.make_m3u8(src)
@@ -482,13 +581,24 @@ class XtreamCodes:
                         break
                     else:
                         NSPLAYER = True
+                        if count == 1:
+                            logger.warning(
+                                'Servidor da playlist HLS respondeu HTTP %s', code
+                            )
                         if '/live/' in url and url.count('/') == 6 and CACHE_M3U8:
                             src = CACHE_M3U8
                             src = src.encode('utf-8') #if six.PY3 else src
                             self_server.conn.sendall(src)
                             break
-                except:
-                    pass
+                        # pausa antes de tentar de novo (não martela o servidor)
+                        time.sleep(0.5)
+                except requests.exceptions.RequestException as exc:
+                    if count in (1, MAX_RETRY):
+                        logger.warning(
+                            'Falha na requisicao da playlist HLS, tentativa %s/%s (%s)',
+                            count, MAX_RETRY, type(exc).__name__
+                        )
+                    time.sleep(0.5)
 
     def send_ts(self,self_server,url):
         global MAX_RETRY
@@ -518,16 +628,19 @@ class XtreamCodes:
                     ts = 'http://' + URL_BASE.split('/')[2] + '/' + url
             else:
                 ts = url
+            sent_any = False
             for i in range(MAX_RETRY):
                 count = i + 1
                 if STOP_SERVER:
                     break              
                 # if count == MAX_RETRY - 4:
                 #     notify('Canal ruim, tente outro canal ou lista')
+                client_gone = False
+                r = None
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(ts, headers=header_, allow_redirects=True, stream=True, verify=False)
+                    r = http_get(ts, headers=header_, allow_redirects=True, stream=True, verify=True, timeout=(5, 15))
                     code = r.status_code
                     log('Status Code: %s'%str(code))
                     if code == 200:
@@ -535,22 +648,36 @@ class XtreamCodes:
                         for chunk in r.iter_content(50*1024):                      
                             try:
                                 self_server.conn.sendall(chunk)
+                                sent_any = True
                                 CACHE_CHUNKS.append(chunk)
                             except:
-                                pass
+                                # o player fechou a conexão: para de baixar
+                                client_gone = True
+                                break
                         break
                     else:
                         if i == 0:
                             DELAY_MODE = False
-                        if CACHE_CHUNKS:
-                            try:
-                                #self.wfile.write(CACHE_CHUNKS[-1])
-                                self_server.conn.sendall(CACHE_CHUNKS[-1])
-                            except:
-                                pass
+                        # antes reenviava CACHE_CHUNKS[-1] aqui, o que repetia
+                        # dados no meio do video e corrompia a imagem.
+                        # Agora apenas espera um pouco e tenta o segmento de novo.
+                        time.sleep(0.5)
 
-                except:
-                    pass
+                except requests.exceptions.RequestException as exc:
+                    # se já enviou parte do segmento, repetir duplicaria dados
+                    if sent_any:
+                        break
+                    if count == MAX_RETRY:
+                        log('Falha ao carregar segmento (%s)' % type(exc).__name__)
+                    time.sleep(0.5)
+                finally:
+                    if r is not None:
+                        try:
+                            r.close()
+                        except:
+                            pass
+                if client_gone:
+                    break
 
     def parse_url(self,url):
         parsed_url = urlparse(url)
@@ -564,6 +691,7 @@ class XtreamCodes:
         global URL_BASE_STALKER
         global TOKEN_STALKER
         global NSPLAYER
+        global CACHE_M3U8
         if 'm3u8' in url:
             self_server.send_header('Content-Type', 'application/x-mpegURL')
             self_server.end_headers()                       
@@ -572,7 +700,7 @@ class XtreamCodes:
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=4, verify=False)
+                    r = http_get(url,headers=header_, allow_redirects=True, timeout=4, verify=True)
                     url = r.url
                 except:
                     pass
@@ -597,7 +725,7 @@ class XtreamCodes:
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=4, verify=False)
+                    r = http_get(url,headers=header_, allow_redirects=True, timeout=4, verify=True)
                     code = r.status_code
                     log('Status Code: %s'%str(code))
                     if code == 200:
@@ -618,9 +746,12 @@ class XtreamCodes:
                             src = src.encode('utf-8') #if six.PY3 else src
                             self_server.conn.sendall(src)
                             break
+                        time.sleep(0.5)
                         
-                except:
-                    pass
+                except requests.exceptions.RequestException as exc:
+                    if count == MAX_RETRY:
+                        log('Falha ao carregar playlist Stalker (%s)' % type(exc).__name__)
+                    time.sleep(0.5)
                     
     
     def send_ts_stalker(self,self_server,url): 
@@ -645,14 +776,17 @@ class XtreamCodes:
             self_server.send_header('Content-Type', 'video/mp2t')
             self_server.end_headers()            
             ts = URL_BASE_STALKER + url
+            sent_any = False
             for i in range(MAX_RETRY):
                 count = i + 1
                 if STOP_SERVER:
                     break        
+                client_gone = False
+                r = None
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(ts,headers=header_, allow_redirects=True, stream=True, verify=False)
+                    r = http_get(ts,headers=header_, allow_redirects=True, stream=True, verify=True, timeout=(5, 15))
                     code = r.status_code
                     log('Status Code: %s'%str(code))
                     if code == 200:
@@ -660,22 +794,32 @@ class XtreamCodes:
                         for chunk in r.iter_content(50*1024):                      
                             try:
                                 self_server.conn.sendall(chunk)
+                                sent_any = True
                                 CACHE_CHUNKS.append(chunk)
                             except:
-                                pass
+                                client_gone = True
+                                break
                         break
                     else:
                         if i == 0:
                             DELAY_MODE = False
-                        if CACHE_CHUNKS:
-                            try:
-                                #self.wfile.write(CACHE_CHUNKS[-1])
-                                self_server.conn.sendall(CACHE_CHUNKS[-1])
-                            except:
-                                pass
+                        # não reenvia mais o último chunk (corrompia o video)
+                        time.sleep(0.5)
 
-                except:
-                    pass         
+                except requests.exceptions.RequestException as exc:
+                    if sent_any:
+                        break
+                    if count == MAX_RETRY:
+                        log('Falha ao carregar segmento Stalker (%s)' % type(exc).__name__)
+                    time.sleep(0.5)
+                finally:
+                    if r is not None:
+                        try:
+                            r.close()
+                        except:
+                            pass
+                if client_gone:
+                    break
 
 
 class ProxyHandler(XtreamCodes):
@@ -685,6 +829,7 @@ class ProxyHandler(XtreamCodes):
         self.server = server
         self.path = ""
         self.request_method = ""
+        self.is_hls_resource = False
 
     def parse_request(self, request):
         parts = request.split(b' ')
@@ -725,25 +870,20 @@ class ProxyHandler(XtreamCodes):
             return 0, content_length - 1       
 
     def stream_video(self, video_url, request_data):
-        try:
-            video_url = video_url.split('|')[0]
-        except:
-            pass
-        try:
-            video_url = video_url.split('%7C')[0]
-        except:
-            pass
+        video_url = normalize_url(video_url)
         global HEADERS_BASE
-        headers = HEADERS_BASE
+        # cópia: antes o 'Range' era gravado direto em HEADERS_BASE e depois
+        # vazava para as requisições de m3u8/ts
+        headers = dict(HEADERS_BASE)
         try:
             DNSOverride()
-            response = requests.head(video_url, headers=headers)
+            response = http_head(video_url, headers=headers, timeout=(5, 10))
             if response.status_code == 200:
                 content_length = int(response.headers.get('Content-Length', 0))
                 start, end = self.get_range(request_data, content_length)
                 headers['Range'] = 'bytes=%s-%s'%(str(start),str(end))
                 DNSOverride()
-                response = requests.get(video_url, headers=headers, stream=True)
+                response = http_get(video_url, headers=headers, stream=True, timeout=(5, 15))
                 if response.status_code == 206 or response.status_code == 200:
                     self.send_partial_response(206, response.headers, content_length, response.iter_content(chunk_size=1024), start, end)
                 else:
@@ -771,64 +911,96 @@ class ProxyHandler(XtreamCodes):
                 pass
 
     def handle_request(self):
+        try:
+            self._handle_request()
+        except requests.exceptions.RequestException as exc:
+            logger.warning(
+                'Falha de rede no proxy (%s)', type(exc).__name__
+            )
+        except OSError as exc:
+            logger.debug('Conexao do proxy encerrada (%s)', type(exc).__name__)
+        except Exception as exc:
+            logger.error(
+                'Falha ao processar requisicao do proxy (%s)', type(exc).__name__
+            )
+        finally:
+            try:
+                self.conn.close()
+            except OSError:
+                pass
+
+    def _handle_request(self):
         global URL_BASE, LAST_URL, HEADERS_BASE, STOP_SERVER, CACHE_CHUNKS, CACHE_M3U8, DELAY_MODE
         global RESOLUTION, LAST_M3U8, PARAMS, URL_BASE_PARAMS, CHECK_URL_PARAMS, URL_BASE_STALKER, TOKEN_STALKER       
+        global FAKE_IP_SESSION, LAST_CHANNEL
         
         request_data = self.conn.recv(1024)
+        if not request_data:
+            return
         self.parse_request(request_data)
         self.parse_request2(request_data)
         
         if self.request_method == 'HEAD':
             self.send_response(200)
-            pass
+            self.end_headers()
         elif self.path == "/stop":
             self.send_response(200)
             STOP_SERVER = True
-            URL_BASE = ''; LAST_URL = ''; HEADERS_BASE = {}; CACHE_CHUNKS = []; CACHE_M3U8 = ''
-            DELAY_MODE = True; LAST_M3U8 = ''; RESOLUTION = True; PARAMS = ''
-            CHECK_URL_PARAMS = True; URL_BASE_STALKER = ''; TOKEN_STALKER = ''           
+            reset_channel_state()
+            reset_session()
             self.server.stop_server()
         elif self.path == "/reset":
             self.send_response(200)
-            URL_BASE = ''; LAST_URL = ''; HEADERS_BASE = {}; CACHE_CHUNKS = []; CACHE_M3U8 = ''
-            DELAY_MODE = True; RESOLUTION = True; LAST_M3U8 = ''; PARAMS = ''
-            URL_BASE_PARAMS = ''; CHECK_URL_PARAMS = True; URL_BASE_STALKER = ''; TOKEN_STALKER = ''
+            reset_channel_state()
+            reset_session()
         elif self.path == '/check':
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
             self.conn.sendall(b"Hello, world!")
         else:
-            url_path = unquote_plus(self.path)
-            self.set_headers(url_path)
-            url_parts = urlparse(url_path)
-            query_params = parse_qs(url_parts.query)
-            
+            request_parts = urlparse(self.path)
+            url_path = unquote_plus(request_parts.path)
+            query_params = parse_qs(request_parts.query, keep_blank_values=True)
+            is_hls_resource = query_params.get('hls') == ['1']
+
             if 'url' in query_params:
-                url = url_path.split('url=')[1]
-                try:
-                    url = base64.b64decode(url).decode('utf-8')
-                except:
-                    pass
-                try:
-                    url = url.split('|')[0]
-                except:
-                    pass
-                try:
-                    url = url.split('%7C')[0]
-                except:
-                    pass
+                url = query_params['url'][0]
+                if urlparse(url).scheme.lower() not in ('http', 'https'):
+                    try:
+                        decoded_url = base64.b64decode(url).decode('utf-8')
+                        if urlparse(decoded_url).scheme.lower() in ('http', 'https'):
+                            url = decoded_url
+                    except Exception:
+                        pass
+                url = normalize_url(url)
+                self.set_headers(url)
 
                 # --- NOVO AJUSTE PARA FORMATO DIRETO ---
-                if re.search(r'/\w+/\w+/\d+$', url):
+                if not is_hls_resource and re.search(r'/\w+/\w+/\d+$', url):
                     parsed_url = urlparse(url)
                     host_part = '%s://%s' % (parsed_url.scheme, parsed_url.netloc)
                     url = host_part + '/live' + parsed_url.path + '.m3u8'
                 # ----------------------------------------
-                
-                url = self.convert_to_m3u8(url)
+                if not is_hls_resource:
+                    url = self.convert_to_m3u8(url)
             else:
                 url = url_path
+                self.set_headers(url)
+
+            self.is_hls_resource = is_hls_resource
+
+            # TROCA DE CANAL: se o canal (/live/usuario/senha/id.m3u8) mudou,
+            # limpa o estado do canal anterior (sem precisar do /reset).
+            # Não mexe nas playlists internas/segmentos do mesmo canal.
+            channel_url = url.split('?')[0]
+            if (not is_hls_resource and '/live/' in channel_url
+                    and '.m3u8' in channel_url and channel_url.count('/') == 6):
+                if LAST_CHANNEL and channel_url != LAST_CHANNEL:
+                    log('TROCA DE CANAL: limpando estado anterior')
+                    reset_channel_state()
+                    reset_session()
+                LAST_CHANNEL = channel_url
                 
             if '.m3u8' in url and '?' in url and not 'extension' in url:
                 if not PARAMS:
@@ -867,8 +1039,6 @@ class ProxyHandler(XtreamCodes):
             elif '/live/' in url and not '.ts' in url and not '.m3u8' in url:
                 self.send_response(200)
                 self.send_m3u8(self, url + '.m3u8')
-
-        self.conn.close()
 
 def monitor():
     try:

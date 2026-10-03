@@ -1,2 +1,10 @@
 [B]Version 1.1.10[/B]
 Matrix compatible version
+- Resolucao DNS por HTTPS (Cloudflare, com fallback para Google) usando IPv4.
+- Opcao para usar HTTPS nos streams quando o servidor oferecer suporte, preservando o HTTP como fallback e respeitando proxies locais e portas IPTV.
+- Ajustes no proxy e na reproducao de streams IPTV, incluindo suporte a links Xtream e retentativas HLS.
+- EPG XMLTV para streams Xtream: carrega a programacao em segundo plano, armazena cache e exibe o programa atual e o proximo quando ha identificador EPG.
+- Controle parental: categorias adultas ocultas por padrao, opcao para exibi-las e solicitacao de PIN ao acessar conteudo adulto.
+- Melhorias na reproducao IPTV via FFmpegDirect, com resolucao DNS/IPv4, tratamento de redirecionamentos e reconexao de streams.
+- Servico DNS finalizado corretamente ao fechar, reiniciar ou suspender o Kodi.
+- Compatibilidade de metadados de video com as versoes recentes do Kodi.

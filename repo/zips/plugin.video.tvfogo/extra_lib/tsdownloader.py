@@ -53,6 +53,14 @@ PORT_NUMBER = 58550
 url_proxy = 'http://'+HOST_NAME+':'+str(PORT_NUMBER)+'/?url='
 
 
+def convert_m3u8_to_ts(url):
+    parsed_url = urlparse(url)
+    if parsed_url.path.lower().endswith('.m3u8'):
+        parsed_url = parsed_url._replace(path=parsed_url.path[:-5] + '.ts')
+        return parsed_url.geturl()
+    return url
+
+
 global HEADERS_BASE
 global STOP_SERVER
 HEADERS_BASE = {}
@@ -328,18 +336,18 @@ class ProxyHandler(XtreamCodes):
             else:
                 url = url_path
 
-            # Identifica links Xtream Codes (ex: /user/pass/12345)
-            is_xtream_link = bool(re.search(r'/\w+/\w+/\d+$', url))
-
-            # XTREAM CODES E FORMATOS TS
-            if '.mp4' in url and not '.m3u8' in url and not '.ts' in url:
-                self.stream_video(url, request_data)                    
-            elif '.ts' in url or is_xtream_link:
+            # Neste player, uma URL de playlist selecionada representa o
+            # mesmo canal no formato TS; os parâmetros da URL são mantidos.
+            media_url = url.split('|', 1)[0].split('%7C', 1)[0]
+            media_url = convert_m3u8_to_ts(media_url)
+            if urlparse(media_url).path.lower().endswith('.ts'):
                 self.send_response(200) # envia status 200 sempre
-                self.send_ts(self, url)
-            elif not '.m3u8' in url and not '.ts' in url and not '.mp3' in url and not '.rmv' in url and not '.rmvb' in url and not 'm3u8' in url:
-                self.send_response(200) # envia status 200 sempre
-                self.send_ts(self, url)
+                self.send_ts(self, media_url)
+            else:
+                self.send_response(415, 'Unsupported Media Type')
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.conn.sendall(b'TSDownloader accepts only .ts streams.')
                 
         self.conn.close()  # Fechar o socket de conexão após enviar a resposta
 

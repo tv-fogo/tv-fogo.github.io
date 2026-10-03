@@ -58,6 +58,7 @@ class handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def send_empty_response(self, status=200):
+        self.close_connection = True
         self.send_response(status)
         self.send_header('Content-Length', '0')
         self.send_header('Connection', 'close')
@@ -86,6 +87,13 @@ class handler(SimpleHTTPRequestHandler):
         """Returns the final component of a pathname"""
         i = p.rfind('/') + 1
         return p[i:] 
+
+    def clean_media_url(self, url):
+        url = url.split('&h123=true&', 1)[0]
+        return url.split('|', 1)[0]
+
+    def is_ts_url(self, url):
+        return urlparse(self.clean_media_url(url)).path.lower().endswith('.ts')
     
     def check_stream(self,url,headers):
         r = requests.head(url,headers=headers,timeout=3, verify=False)
@@ -287,90 +295,69 @@ class handler(SimpleHTTPRequestHandler):
             headers = GLOBAL_HEADERS
         if GLOBAL_URL and not 'http' in url:
             url = GLOBAL_URL + url
-        # url = url.replace('esportes4/', '')
-        if head:
-            self.send_stream_headers('video/mp2t')
+        url = self.clean_media_url(url)
+        request_headers = dict(headers or {})
+        request_headers.setdefault('Accept-Encoding', 'identity')
+        byte_range = self.headers.get('Range')
+        if byte_range:
+            request_headers['Range'] = byte_range
+
+        response = None
+        for attempt in range(2):
+            if STOP_SERVER:
+                return
+            try:
+                if head:
+                    response = requests.head(
+                        url, headers=request_headers, timeout=(10, 20),
+                        verify=False, allow_redirects=True
+                    )
+                else:
+                    response = requests.get(
+                        url, headers=request_headers, stream=True,
+                        timeout=(10, 30), verify=False
+                    )
+                break
+            except requests.RequestException as exc:
+                self.log_error("TS proxy upstream request failed (%s)", type(exc).__name__)
+                if attempt == 0:
+                    time.sleep(0.5)
+
+        if response is None:
+            self.send_empty_response(502)
             return
-        def head_ts(url,headers):
-            r = requests.head(url,headers=headers,timeout=3,verify=False)
-            if r.status_code == 200:
-                return True
-            return False
-        
-        def fechar_server():
-            def shutdown(server):
-                server.shutdown()
-            t = threading.Thread(target=shutdown, args=(self.server, ))
-            t.start() 
 
+        try:
+            status = response.status_code
+            if status not in (200, 206) and not (head and 200 <= status < 300):
+                self.send_empty_response(status)
+                self.log_error("TS proxy upstream returned HTTP %s", status)
+                return
 
-        for i in range(30):
-            i = i + 1
-            if STOP_SERVER:
-                break
-            # if self.cpu() >= MAX_CPU:
-            #     self.send_response(200)
-            #     self.end_headers()
-            #     def shutdown(server):
-            #         server.shutdown()
-            #     t = threading.Thread(target=shutdown, args=(self.server, ))
-            #     t.start()
-            #     break
-            # if i > 6:
-            #     if not self.playing():
-            #         self.send_response(200)
-            #         self.end_headers()
-            #         def shutdown(server):
-            #             server.shutdown()
-            #         t = threading.Thread(target=shutdown, args=(self.server, ))
-            #         t.start()
-            #         break
-            if not STOP_SERVER:  
+            self.close_connection = True
+            self.send_response(status)
+            self.send_header('Content-Type', 'video/mp2t')
+            for header in ('Content-Length', 'Content-Range', 'Accept-Ranges'):
+                value = response.headers.get(header)
+                if value is not None:
+                    self.send_header(header, value)
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Connection', 'close')
+            self.end_headers()
+
+            if not head:
                 try:
-                    r = requests.get(url, headers=headers, stream=True, verify=False)
-                    if r.status_code == 200:
-                        self.send_stream_headers('video/mp2t')
-                        for chunk in r.iter_content(300000):                           
-                            try:
-                                if chunk:
-                                    self.wfile.write(chunk)
-                                    self.wfile.flush()
-                            except:
-                                break
-                            if STOP_SERVER:
-                                break
-                    r.close()
-                    break
-                except:
-                    pass
-            if STOP_SERVER:
-                break                           
-            # if head_ts(url,headers):                                    
-            #     try:
-            #         r = requests.get(url, headers=headers, stream=True, verify=False)
-            #         if r.status_code == 200:
-            #             self.send_response(200)
-            #             self.send_header('Content-type','video/mp2t')
-            #             self.end_headers()
-            #             for chunk in r.iter_content(300000):                           
-            #                 try:
-            #                     self.wfile.write(chunk)
-            #                 except:
-            #                     pass
-            #                 if not self.playing():
-            #                     fechar_server()
-            #                     break
-            #         r.close()
-            #         break
-            #     except:
-            #         pass
-            if i == 15:
-                self.send_empty_response(404)
-                # def shutdown(server):
-                #     server.shutdown()
-                # t = threading.Thread(target=shutdown, args=(self.server, ))
-                # t.start()                
-                break
+                    for chunk in response.iter_content(chunk_size=65536):
+                        if STOP_SERVER:
+                            break
+                        if chunk:
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                except (requests.RequestException, OSError) as exc:
+                    self.log_error("TS proxy stream interrupted (%s)", type(exc).__name__)
+        finally:
+            response.close()
     
     def m3u8(self,url,headers,head=False):
         #print('acessando a url: ',url)
@@ -485,7 +472,8 @@ class handler(SimpleHTTPRequestHandler):
             if url:
                 if not GLOBAL_HEADERS:
                     self.get_headers(url)
-                if not url.lower().split('?', 1)[0].endswith('.ts'):
+                url = self.clean_media_url(url)
+                if not self.is_ts_url(url):
                     url = self.convert_to_m3u8(url)
                 # ts_link = self.convert_to_ts(url)
                 # url = ts_link
@@ -527,7 +515,7 @@ class handler(SimpleHTTPRequestHandler):
             elif not 'http' in url and not '/hl' in url and '.ts' in self.path:
                 print('nao http, nao /hl e .ts')
                 self.ts(self.path,GLOBAL_HEADERS,head=True)
-            elif url.endswith(".ts") or ('/hl' in url and not url.endswith(".ts") and not url.endswith(".m3u8")):
+            elif self.is_ts_url(url) or ('/hl' in url and not url.endswith(".ts") and not url.endswith(".m3u8")):
                 self.ts(url,GLOBAL_HEADERS,head=True)
             elif url.endswith(".html"):
                 self.ts(url,GLOBAL_HEADERS,head=True)
@@ -561,7 +549,8 @@ class handler(SimpleHTTPRequestHandler):
             if url:
                 if not GLOBAL_HEADERS:
                     self.get_headers(url)
-                if not url.lower().split('?', 1)[0].endswith('.ts'):
+                url = self.clean_media_url(url)
+                if not self.is_ts_url(url):
                     url = self.convert_to_m3u8(url)
                 # ts_link = self.convert_to_ts(url)
                 # url = ts_link
@@ -603,7 +592,7 @@ class handler(SimpleHTTPRequestHandler):
             elif not 'http' in url and not '/hl' in url and '.ts' in self.path:
                 print('nao http, nao /hl e .ts')
                 self.ts(self.path,GLOBAL_HEADERS)
-            elif url.endswith(".ts") or ('/hl' in url and not url.endswith(".ts") and not url.endswith(".m3u8")):
+            elif self.is_ts_url(url) or ('/hl' in url and not url.endswith(".ts") and not url.endswith(".m3u8")):
                 self.ts(url,GLOBAL_HEADERS)
             elif url.endswith(".html"):
                 self.ts(url,GLOBAL_HEADERS)
@@ -662,19 +651,9 @@ class mediaserver:
 
 def prepare_url(url):
     try:
-        url = unquote_plus(url)
-    except:
-        pass
-    try:
         url = unquote(url)
     except:
         pass
-    base_url, separator, stream_headers = url.partition('|')
-    path, query_separator, query = base_url.partition('?')
-    if path.lower().endswith('.ts'):
-        path = path[:-3] + '.m3u8'
-        base_url = path + (query_separator + query if query_separator else '')
-        url = base_url + (separator + stream_headers if separator else '')
     url = url.replace('|', '&h123=true&')
     url = quote_plus(url)
     url = 'http://'+HOST_NAME+':'+str(PORT_NUMBER)+'/?url=' + url

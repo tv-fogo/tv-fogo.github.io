@@ -28,6 +28,8 @@ def convert_to_m3u8(url):
         url = url.split('|')[0]
     elif '%7C' in url:
         url = url.split('%7C')[0]
+    if urlparse(url).path.lower().endswith('.ts'):
+        return url
     
     if not '.m3u8' in url and not '/hl' in url and int(url.count("/")) > 4 and not '.mp4' in url and not '.avi' in url:
         parsed_url = urlparse(url)
@@ -43,25 +45,19 @@ def convert_to_m3u8(url):
             else:
                 url = host_part1 + host_part2
                 
-            file = basename(url)
-            if '.ts' in file:
-                file_new = file.replace('.ts', '.m3u8')
-                url = url.replace(file, file_new)
-            else:
-                # Adiciona o .m3u8 no final para que o HLSRETRY funcione
-                url = url + '.m3u8'
+            url = url + '.m3u8'
         except:
             pass
     return url 
 
 def player_hlsretry(name,url,iconimage,description):
     if name:
-        name = 'Tv Fogo - HLSRETRY - ' + name
+        name = 'TV FOGO - HLSRETRY - ' + name
     else:
-        name = 'Tv Fogo - HLSRETRY'
+        name = 'TV FOGO - HLSRETRY'
     url = unquote_plus(url)
     url = convert_to_m3u8(url)
-    url = 'http://%s:%s/?url=%s'%(str(hlsretry.HOST_NAME),str(hlsretry.PORT_NUMBER),quote(url))
+    url = 'http://%s:%s/?url=%s'%(str(hlsretry.HOST_NAME),str(hlsretry.PORT_NUMBER),quote(url, safe=''))
     hlsretry.XtreamProxy().start()
     li=xbmcgui.ListItem(name)
     iconimage = iconimage if iconimage else ''
@@ -71,12 +67,16 @@ def player_hlsretry(name,url,iconimage,description):
     _monitor_local_player(hlsretry.HOST_NAME, hlsretry.PORT_NUMBER)
 
 def player_tsdownloader(name,url,iconimage,description):
-    if name:
-        name = 'Tv Fogo - TSDOWNLOADER - ' + name
-    else:
-        name = 'Tv Fogo - TSDOWNLOADER'
     url = unquote_plus(url)
-    url = url.replace('.m3u8', '')
+    media_url = url.split('|', 1)[0]
+    if name:
+        name = 'TV FOGO - TSDOWNLOADER - ' + name
+    else:
+        name = 'TV FOGO - TSDOWNLOADER'
+    media_path = urllib_parse.urlparse(media_url).path.lower()
+    if not (media_path.endswith('.ts') or media_path.endswith('.m3u8')):
+        dialog("TSDownloader aceita links .ts ou .m3u8 para conversao em TS.")
+        return
     url = 'http://%s:%s/?url=%s'%(str(tsdownloader.HOST_NAME),str(tsdownloader.PORT_NUMBER),quote(url))
     tsdownloader.XtreamProxy().start() 
     li=xbmcgui.ListItem(name)
@@ -100,9 +100,9 @@ def player_input(name, url, iconimage, description):
     dns_resolver = DNSOverride()
 
     if name:
-        name = "Tv Fogo - INPUTSTREAM FFMPEGDIRECT - " + name
+        name = "TV FOGO - INPUTSTREAM FFMPEGDIRECT - " + name
     else:
-        name = "Tv Fogo - INPUTSTREAM FFMPEGDIRECT"
+        name = "TV FOGO - INPUTSTREAM FFMPEGDIRECT"
 
     exts = (".mp4", ".mp3", ".mkv", ".avi", ".rmvb")
     if not any(ext in url.lower() for ext in exts):
@@ -351,7 +351,7 @@ def monitor():
 
 def proxy2_thread(name,iconImage,url_to_play):
     if not name:
-        name = 'Tv Fogo'
+        name = 'TV FOGO'
     name = name + ' - Proxy 2'
     try:
         media_url = server.extract_media_url(url_to_play)
@@ -391,11 +391,11 @@ def run(params):
     iconimage = params.get(
         "iconImage", params.get("thumbnailImage", addonIcon)
     )
-    name = params.get("name", "Tv Fogo")
+    name = params.get("name", "TV FOGO")
     url = params.get("url", "")
     description = params.get("description", "")
     if not url:
-        dialog("Tv Fogo PLAYER")
+        dialog("TV FOGO PLAYER")
         return
 
     stream_type = (stream_type or "").upper()
