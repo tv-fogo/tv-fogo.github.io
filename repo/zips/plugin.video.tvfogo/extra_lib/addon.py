@@ -28,8 +28,6 @@ def convert_to_m3u8(url):
         url = url.split('|')[0]
     elif '%7C' in url:
         url = url.split('%7C')[0]
-    if urlparse(url).path.lower().endswith('.ts'):
-        return url
     
     if not '.m3u8' in url and not '/hl' in url and int(url.count("/")) > 4 and not '.mp4' in url and not '.avi' in url:
         parsed_url = urlparse(url)
@@ -45,7 +43,13 @@ def convert_to_m3u8(url):
             else:
                 url = host_part1 + host_part2
                 
-            url = url + '.m3u8'
+            file = basename(url)
+            if '.ts' in file:
+                file_new = file.replace('.ts', '.m3u8')
+                url = url.replace(file, file_new)
+            else:
+                # Adiciona o .m3u8 no final para que o HLSRETRY funcione
+                url = url + '.m3u8'
         except:
             pass
     return url 
@@ -57,7 +61,7 @@ def player_hlsretry(name,url,iconimage,description):
         name = 'TV FOGO - HLSRETRY'
     url = unquote_plus(url)
     url = convert_to_m3u8(url)
-    url = 'http://%s:%s/?url=%s'%(str(hlsretry.HOST_NAME),str(hlsretry.PORT_NUMBER),quote(url, safe=''))
+    url = 'http://%s:%s/?url=%s'%(str(hlsretry.HOST_NAME),str(hlsretry.PORT_NUMBER),quote(url))
     hlsretry.XtreamProxy().start()
     li=xbmcgui.ListItem(name)
     iconimage = iconimage if iconimage else ''
@@ -67,16 +71,12 @@ def player_hlsretry(name,url,iconimage,description):
     _monitor_local_player(hlsretry.HOST_NAME, hlsretry.PORT_NUMBER)
 
 def player_tsdownloader(name,url,iconimage,description):
-    url = unquote_plus(url)
-    media_url = url.split('|', 1)[0]
     if name:
         name = 'TV FOGO - TSDOWNLOADER - ' + name
     else:
         name = 'TV FOGO - TSDOWNLOADER'
-    media_path = urllib_parse.urlparse(media_url).path.lower()
-    if not (media_path.endswith('.ts') or media_path.endswith('.m3u8')):
-        dialog("TSDownloader aceita links .ts ou .m3u8 para conversao em TS.")
-        return
+    url = unquote_plus(url)
+    url = url.replace('.m3u8', '')
     url = 'http://%s:%s/?url=%s'%(str(tsdownloader.HOST_NAME),str(tsdownloader.PORT_NUMBER),quote(url))
     tsdownloader.XtreamProxy().start() 
     li=xbmcgui.ListItem(name)
@@ -236,7 +236,7 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.protocol_whitelist', 'ALL')
                 play_item.setProperty('inputstream.ffmpegdirect.max_bandwidth', '0')
                 play_item.setProperty('inputstream.ffmpegdirect.ignore_ts', 'false')
-                play_item.setProperty('inputstream.ffmpegdirect.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+                play_item.setProperty('inputstream.ffmpegdirect.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.connecttimeout', '15')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.timeout', '30')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.followlocation', '1')
@@ -262,7 +262,7 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.cache', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.seekable', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.ignore_ts', 'false')
-                play_item.setProperty('inputstream.ffmpegdirect.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+                play_item.setProperty('inputstream.ffmpegdirect.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.connecttimeout', '15')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.timeout', '30')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.followlocation', '1')

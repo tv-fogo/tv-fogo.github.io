@@ -20,7 +20,7 @@
   <category label="Controle dos Pais">
     <setting label="[COLOR lightblue]Controle dos Pais:[/COLOR]" type="lsep"/>
     <setting label="Tipo de Teclado (OK para trocar)" id="keyboard" type="enum" values="Numerico|Alfanumerico" default="0"/>
-    <setting label="Entre aqui para alterar senha" type="action" action="RunScript(plugin.video.tvfogo, SetPassword)"/>
+    <setting label="Entre aqui para alterar senha" type="action" action="RunScript(plugin.video.gloriosotv, SetPassword)"/>
     <setting label="[COLOR yellow][B]Senha padrao 0069[/B][/COLOR]" type="lsep"/>
   </category>
   <category label="Add Source">
@@ -28,17 +28,17 @@
     <setting id="new_file_source" type="file" source="files" label="Choose File" default="" visible="eq(-1,0)"/>
     <setting id="new_url_source" type="text" label="Add URL" default="" visible="eq(-2,1)"/>
     <setting type="sep" />
-    <setting type="action" label="Add Source" option="close" action="RunPlugin(plugin://plugin.video.tvfogo/?mode=7)" />
+    <setting type="action" label="Add Source" option="close" action="RunPlugin(plugin.video.tvfogo/?mode=7)" />
     <setting type="sep" />
     <setting id="searchotherplugins" label="Search Other plugins" type="bool" default="false"/>
   </category>
 
   <category label=".xml Database">
     <setting id="browse_xml_database" type="bool" label="Browse and play from .xml Database" default="false"/>
-    <setting type="action" label="Add .xml Database Sources" option="close" action="Container.Update(plugin://plugin.video.tvfogo/?mode=14)" />
+    <setting type="action" label="Add .xml Database Sources" option="close" action="Container.Update(plugin.video.tvfogo/?mode=14)" />
   </category>
   <category label="Community Files">
     <setting id="browse_community" type="bool" label="Browse and play from Community Files" default="false"/>
-    <setting type="action" label="Add Community File URL as Source" option="close" action="Container.Update(plugin://plugin.video.tvfogo/?mode=10)" />
+    <setting type="action" label="Add Community File URL as Source" option="close" action="Container.Update(plugin.video.tvfogo/?mode=10)" />
   </category>
 </settings>
