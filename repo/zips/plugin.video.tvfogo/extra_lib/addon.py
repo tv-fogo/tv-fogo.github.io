@@ -95,7 +95,7 @@ def player_input(name, url, iconimage, description):
         from extra_lib.secureurl import play_url as secure_play_url
     except Exception:
         from secureurl import play_url as secure_play_url
-    
+
     url = secure_play_url(url)  # criptografa o stream (http -> https)
     dns_resolver = DNSOverride()
 
@@ -119,7 +119,7 @@ def player_input(name, url, iconimage, description):
                     pass
 
             url = unquote_plus(url)
-            
+
             # Montagem do User-Agent / Headers na própria URL
             if "|" in url:
                 base_url, headers = url.split("|", 1)
@@ -213,7 +213,7 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.license_type', 'com.widevine.alpha')
                 play_item.setProperty('inputstream.ffmpegdirect.license_key', lic)
             if '|' in url:
-                url, strhdr = url.split('|')
+                url, strhdr = url.split('|', 1)
                 play_item.setProperty('inputstream.ffmpegdirect.stream_headers', strhdr)
                 item.setPath(url)
             if '.m3u8' in url:
@@ -221,7 +221,9 @@ def player_input(name, url, iconimage, description):
                     play_item.setProperty('inputstreamaddon', 'inputstream.ffmpegdirect')
                 else:
                     play_item.setProperty('inputstream', 'inputstream.ffmpegdirect')
+                item.setMimeType('application/x-mpegURL')
                 play_item.setProperty('inputstream.ffmpegdirect.manifest_type', 'hls')
+                play_item.setProperty('inputstream.ffmpegdirect.is_realtime_stream', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.open_mode', 'curl')
                 play_item.setProperty('inputstream.ffmpegdirect.stream_mode', 'timeshift')
                 play_item.setProperty('inputstream.ffmpegdirect.chunk_size', '67108864')
@@ -234,7 +236,6 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.scalevideo', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.codec_whitelist', 'ALL')
                 play_item.setProperty('inputstream.ffmpegdirect.protocol_whitelist', 'ALL')
-                play_item.setProperty('inputstream.ffmpegdirect.max_bandwidth', '0')
                 play_item.setProperty('inputstream.ffmpegdirect.ignore_ts', 'false')
                 play_item.setProperty('inputstream.ffmpegdirect.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36')
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.connecttimeout', '15')
@@ -278,6 +279,7 @@ def player_input(name, url, iconimage, description):
                 else:
                     play_item.setProperty('inputstream', 'inputstream.ffmpegdirect')
                 play_item.setProperty('inputstream.ffmpegdirect.manifest_type', 'ism')
+                play_item.setProperty('inputstream.ffmpegdirect.is_realtime_stream', 'true')
                 item.setMimeType('application/vnd.ms-sstr+xml')
                 item.setContentLookup(False)
             item.setPath(url)
