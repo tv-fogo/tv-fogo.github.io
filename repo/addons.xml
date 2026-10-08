@@ -419,7 +419,7 @@ Agora compatível com o Kodi 21.3 e versões superiores.
   </extension>
 </addon>
 
-<addon id="plugin.video.tvfogo" version="1.1.10" name="[B][COLOR chocolate]Tv Fogo[/COLOR][/B]" provider-name="[B][COLOR yellow]Henrique Castro[/COLOR][/B]">
+<addon id="plugin.video.tvfogo" version="1.1.11" name="[B][COLOR chocolate]Tv Fogo[/COLOR][/B]" provider-name="[B][COLOR yellow]Henrique Castro[/COLOR][/B]">
 	<requires>
 		<import addon="script.module.beautifulsoup4" />
 		<import addon="script.module.six" />
