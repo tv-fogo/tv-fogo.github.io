@@ -226,7 +226,7 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.is_realtime_stream', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.open_mode', 'curl')
                 play_item.setProperty('inputstream.ffmpegdirect.stream_mode', 'timeshift')
-                #play_item.setProperty('inputstream.ffmpegdirect.chunk_size', '67108864')
+               #play_item.setProperty('inputstream.ffmpegdirect.chunk_size', '67108864')
                 play_item.setProperty('inputstream.ffmpegdirect.buffer_mode', 'adaptive')
                 play_item.setProperty('inputstream.ffmpegdirect.cache', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.protocol_whitelist', 'http,https,tcp,tls,crypto')

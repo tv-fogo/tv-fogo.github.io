@@ -92,6 +92,9 @@ global CHECK_URL_PARAMS
 global URL_BASE_STALKER
 global TOKEN_STALKER
 MAX_RETRY = 28
+REQUEST_CONNECT_TIMEOUT = 5
+REQUEST_READ_TIMEOUT = 10
+REQUEST_TIMEOUT = (REQUEST_CONNECT_TIMEOUT, REQUEST_READ_TIMEOUT)
 DELAY_MODE = True
 URL_BASE = ''
 URL_BASE_PARAMS = ''
@@ -255,7 +258,7 @@ class XtreamCodes:
             if not PARAMS:
                 for i in range(7):
                     DNSOverride()
-                    r = requests.get(url,headers=header_, timeout=3, verify=False)
+                    r = requests.get(url,headers=header_, timeout=REQUEST_TIMEOUT, verify=False)
                     if r.status_code == 200:
                         url = r.url
                     else:
@@ -277,7 +280,7 @@ class XtreamCodes:
         try:
             for i in range(7):
                 DNSOverride()
-                r = requests.get(url,headers=header_, timeout=3, verify=False)
+                r = requests.get(url,headers=header_, timeout=REQUEST_TIMEOUT, verify=False)
                 if r.status_code == 200:
                     url = r.url
                     break
@@ -312,7 +315,7 @@ class XtreamCodes:
                 try:
                     header_ = HEADERS_BASE
                     DNSOverride()
-                    r = requests.get(url,headers=header_,timeout=3,verify=False)
+                    r = requests.get(url,headers=header_,timeout=REQUEST_TIMEOUT,verify=False)
                     if r.status_code == 200:
                         CHECK_URL_PARAMS = False
                         return url
@@ -438,7 +441,7 @@ class XtreamCodes:
                 if RESOLUTION:                  
                     try:                         
                         DNSOverride()
-                        r = requests.get(url,headers=header_, allow_redirects=True, timeout=2, verify=False)
+                        r = requests.get(url,headers=header_, allow_redirects=True, timeout=REQUEST_TIMEOUT, verify=False)
                         code = r.status_code
                         log('Status Code: %s'%str(code))
                         if code == 200:
@@ -459,7 +462,7 @@ class XtreamCodes:
                 try:
                     log('URL FINAL DO M3U: %s'%url)                      
                     DNSOverride()
-                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=4, verify=False)
+                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=REQUEST_TIMEOUT, verify=False)
                     code = r.status_code
                     log('TESTE DO JOEL')
                     log('HEADERS: %s'%str(header_))
@@ -527,7 +530,7 @@ class XtreamCodes:
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(ts, headers=header_, allow_redirects=True, stream=True, verify=False)
+                    r = requests.get(ts, headers=header_, allow_redirects=True, stream=True, timeout=REQUEST_TIMEOUT, verify=False)
                     code = r.status_code
                     log('Status Code: %s'%str(code))
                     if code == 200:
@@ -572,7 +575,7 @@ class XtreamCodes:
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=4, verify=False)
+                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=REQUEST_TIMEOUT, verify=False)
                     url = r.url
                 except:
                     pass
@@ -597,7 +600,7 @@ class XtreamCodes:
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=4, verify=False)
+                    r = requests.get(url,headers=header_, allow_redirects=True, timeout=REQUEST_TIMEOUT, verify=False)
                     code = r.status_code
                     log('Status Code: %s'%str(code))
                     if code == 200:
@@ -652,7 +655,7 @@ class XtreamCodes:
                 try:
                     header_ = self.update_headers()
                     DNSOverride()
-                    r = requests.get(ts,headers=header_, allow_redirects=True, stream=True, verify=False)
+                    r = requests.get(ts,headers=header_, allow_redirects=True, stream=True, timeout=REQUEST_TIMEOUT, verify=False)
                     code = r.status_code
                     log('Status Code: %s'%str(code))
                     if code == 200:
@@ -737,13 +740,13 @@ class ProxyHandler(XtreamCodes):
         headers = HEADERS_BASE
         try:
             DNSOverride()
-            response = requests.head(video_url, headers=headers)
+            response = requests.head(video_url, headers=headers, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 content_length = int(response.headers.get('Content-Length', 0))
                 start, end = self.get_range(request_data, content_length)
                 headers['Range'] = 'bytes=%s-%s'%(str(start),str(end))
                 DNSOverride()
-                response = requests.get(video_url, headers=headers, stream=True)
+                response = requests.get(video_url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT)
                 if response.status_code == 206 or response.status_code == 200:
                     self.send_partial_response(206, response.headers, content_length, response.iter_content(chunk_size=1024), start, end)
                 else:
@@ -883,7 +886,7 @@ def monitor():
         url = 'http://'+HOST_NAME+':'+str(PORT_NUMBER)+'/stop'
         try:
             DNSOverride()
-            r = requests.get(url,timeout=4)
+            r = requests.get(url,timeout=3)
         except:
             pass
         log('Proxy encerrado')

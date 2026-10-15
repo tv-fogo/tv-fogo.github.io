@@ -57,6 +57,9 @@ global HEADERS_BASE
 global STOP_SERVER
 HEADERS_BASE = {}
 STOP_SERVER = False
+REQUEST_CONNECT_TIMEOUT = 5
+REQUEST_READ_TIMEOUT = 10
+REQUEST_TIMEOUT = (REQUEST_CONNECT_TIMEOUT, REQUEST_READ_TIMEOUT)
 
 class XtreamCodes:
     def set_headers(self,url):
@@ -152,7 +155,7 @@ class XtreamCodes:
                     DNSOverride()
                     r = None
                     try:
-                        r = requests.get(url, headers=header_, allow_redirects=True, stream=True, verify=False, timeout=(3, 10))
+                        r = requests.get(url, headers=header_, allow_redirects=True, stream=True, verify=False, timeout=REQUEST_TIMEOUT)
                         code = r.status_code
                         log('Status Code: %s'%str(code))
                         if code == 200:
@@ -242,14 +245,14 @@ class ProxyHandler(XtreamCodes):
         headers = HEADERS_BASE
         try:
             DNSOverride()
-            response = requests.head(video_url, headers=headers, timeout=(3, 5))
+            response = requests.head(video_url, headers=headers, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 content_length = int(response.headers.get('Content-Length', 0))
                 start, end = self.get_range(request_data, content_length)
                 #headers['Range'] = f'bytes={start}-{end}'  # Adicionando cabeçalho de intervalo
                 headers['Range'] = 'bytes=%s-%s'%(str(start),str(end))  # Adicionando cabeçalho de intervalo
                 DNSOverride()
-                response = requests.get(video_url, headers=headers, stream=True, timeout=(3, 10))
+                response = requests.get(video_url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT)
                 if response.status_code == 206 or response.status_code == 200:
                     self.send_partial_response(206, response.headers, content_length, response.iter_content(chunk_size=1024), start, end)
                 else:

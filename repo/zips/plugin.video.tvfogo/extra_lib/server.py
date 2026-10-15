@@ -41,6 +41,9 @@ HTTPS_PORT = False
 STOP_SERVER = False
 URL_REFERER = ''
 MAX_CPU = 98
+REQUEST_CONNECT_TIMEOUT = 5
+REQUEST_READ_TIMEOUT = 10
+REQUEST_TIMEOUT = (REQUEST_CONNECT_TIMEOUT, REQUEST_READ_TIMEOUT)
 
 
 
@@ -88,7 +91,7 @@ class handler(SimpleHTTPRequestHandler):
         return p[i:] 
     
     def check_stream(self,url,headers):
-        r = requests.head(url,headers=headers,timeout=3, verify=False)
+        r = requests.head(url,headers=headers,timeout=REQUEST_TIMEOUT, verify=False)
         if r.status_code == 200:
             return True
         return False
@@ -96,7 +99,7 @@ class handler(SimpleHTTPRequestHandler):
     def get_origin(url,headers):
         origin = ''
         if int(url.count(':')) == 2:
-            r = requests.get(url,headers=headers,verify=False,timeout=1)
+            r = requests.get(url,headers=headers,verify=False,timeout=REQUEST_TIMEOUT)
             r_parse = urlparse(r.url)
             if 'https' in url or ':443' in url:
                 origin = "https://" + r_parse.netloc
@@ -292,7 +295,7 @@ class handler(SimpleHTTPRequestHandler):
             self.send_stream_headers('video/mp2t')
             return
         def head_ts(url,headers):
-            r = requests.head(url,headers=headers,timeout=3,verify=False)
+            r = requests.head(url,headers=headers,timeout=REQUEST_TIMEOUT,verify=False)
             if r.status_code == 200:
                 return True
             return False
@@ -327,7 +330,7 @@ class handler(SimpleHTTPRequestHandler):
             #         break
             if not STOP_SERVER:  
                 try:
-                    r = requests.get(url, headers=headers, stream=True, verify=False)
+                    r = requests.get(url, headers=headers, stream=True, verify=False, timeout=REQUEST_TIMEOUT)
                     if r.status_code == 200:
                         self.send_stream_headers('video/mp2t')
                         for chunk in r.iter_content(300000):                           
@@ -396,7 +399,7 @@ class handler(SimpleHTTPRequestHandler):
             return
         
         def head_m3u8(url,headers):
-            r = requests.head(url,headers=headers,timeout=3, verify=False)
+            r = requests.head(url,headers=headers,timeout=REQUEST_TIMEOUT, verify=False)
             if r.status_code == 200:
                 return True
             return False
@@ -430,7 +433,7 @@ class handler(SimpleHTTPRequestHandler):
             #         break
             if not STOP_SERVER:
                 try:
-                    r = requests.get(url, headers=headers,timeout=4, verify=False)
+                    r = requests.get(url, headers=headers,timeout=REQUEST_TIMEOUT, verify=False)
                     last_url = r.url
                     # if 'token' in url:
                     #     URL_TOKEN = ''                  
