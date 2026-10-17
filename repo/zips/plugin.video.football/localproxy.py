@@ -2,7 +2,6 @@
 from helpers import *
 import threading
 import socket
-import struct
 import time
 import os
 import requests
@@ -42,6 +41,35 @@ OWNER_PROPERTY_NAME = 'football.proxy.owner'
 # de artwork em cache validas entre reinicios. Se houver colisao, cai atomicamente
 # para porta 0 e grava a nova escolha.
 DYNAMIC_PORT_STATE_FILE = os.path.join(profile, 'dynamic_proxy_port.json')
+
+ADDON_ID = 'plugin.video.football'
+PRIVACY_MODE_SETTING = 'privacy_mode'
+PRIVACY_PROXY_SETTING = 'privacy_proxy_url'
+
+
+def privacy_mode_enabled():
+    """True quando o usuário exige upstream TLS e bloqueio de rota direta."""
+    try:
+        addon = xbmcaddon.Addon(ADDON_ID)
+        return str(addon.getSetting(PRIVACY_MODE_SETTING) or '').strip().lower() == 'true'
+    except Exception:
+        return False
+
+
+def configured_upstream_proxy():
+    """Retorna o proxy HTTPS definido nas configurações do addon, se válido."""
+    try:
+        addon = xbmcaddon.Addon(ADDON_ID)
+        value = str(addon.getSetting(PRIVACY_PROXY_SETTING) or '').strip()
+    except Exception:
+        return ''
+    return _trusted_upstream_proxy(value)
+
+
+def privacy_status():
+    """Resumo sem expor host, porta, credenciais ou URLs nos logs."""
+    enabled = privacy_mode_enabled()
+    return enabled, bool(configured_upstream_proxy())
 
 # Canal de diagnóstico entre o proxy de serviço e o processo do plugin.
 # Só armazena motivo técnico resumido; nunca URL, token ou cabeçalho remoto.
@@ -173,19 +201,17 @@ _owned_port = None
 
 
 class CloudflareDNSResolver(object):
-    """Resolvedor DNS privado ao addon, usando os recursivos 1.1.1.1/1.0.0.1.
+    """Resolvedor DNS privado por DoH direto aos IPs 1.1.1.1/1.0.0.1.
 
     Ele só substitui getaddrinfo enquanto uma requisição HTTP deste addon está em
-    andamento. Isso evita mudar a configuração DNS do dispositivo ou deixar uma
-    alteração permanente no Kodi. Para hostnames externos o modo é estrito: se
-    Cloudflare não responder, a requisição falha sem escapar para o DNS da rede.
+    andamento. Isso evita mudar o DNS do dispositivo ou deixar uma alteração
+    permanente no Kodi. Consultas de nomes usam somente HTTPS; se o DoH não
+    responder, a requisição falha sem consultar DNS em texto claro.
     """
 
     SERVERS = ('1.1.1.1', '1.0.0.1')
     CACHE_TTL_MIN = 60
     CACHE_TTL_MAX = 1800
-    UDP_TIMEOUT = 2.0
-    TCP_TIMEOUT = 3.5
     DOH_TIMEOUT = (3, 6)
 
     def __init__(self):
@@ -219,113 +245,8 @@ class CloudflareDNSResolver(object):
         except Exception:
             return False
 
-    def _skip_name(self, packet, offset):
-        seen = 0
-        length = len(packet)
-        while offset < length:
-            if seen > 128:
-                raise ValueError('Loop de nome DNS')
-            seen += 1
-            size = packet[offset]
-            if size == 0:
-                return offset + 1
-            if size & 0xC0 == 0xC0:
-                if offset + 1 >= length:
-                    raise ValueError('Ponteiro DNS truncado')
-                return offset + 2
-            if size & 0xC0:
-                raise ValueError('Label DNS invalido')
-            offset += 1 + size
-        raise ValueError('Nome DNS truncado')
-
-    def _build_query(self, host):
-        labels = []
-        for label in host.rstrip('.').split('.'):
-            raw = label.encode('idna')
-            if not raw or len(raw) > 63:
-                raise ValueError('Hostname DNS invalido')
-            labels.append(bytes([len(raw)]) + raw)
-        question = b''.join(labels) + b'\x00' + struct.pack('!HH', 1, 1)
-        query_id = struct.unpack('!H', os.urandom(2))[0]
-        return query_id, struct.pack('!HHHHHH', query_id, 0x0100, 1, 0, 0, 0) + question
-
-    def _parse_response(self, packet, query_id):
-        if not packet or len(packet) < 12:
-            return [], self.CACHE_TTL_MIN
-        response_id, flags, qdcount, ancount, _, _ = struct.unpack('!HHHHHH', packet[:12])
-        if response_id != query_id or (flags & 0x8000) == 0 or (flags & 0x000F):
-            return [], self.CACHE_TTL_MIN
-        offset = 12
-        for _ in range(qdcount):
-            offset = self._skip_name(packet, offset)
-            offset += 4
-            if offset > len(packet):
-                return [], self.CACHE_TTL_MIN
-
-        addresses = []
-        ttl_values = []
-        for _ in range(ancount):
-            offset = self._skip_name(packet, offset)
-            if offset + 10 > len(packet):
-                break
-            rtype, rclass, ttl, rdlength = struct.unpack('!HHIH', packet[offset:offset + 10])
-            offset += 10
-            rdata_end = offset + rdlength
-            if rdata_end > len(packet):
-                break
-            if rtype == 1 and rclass == 1 and rdlength == 4:
-                addresses.append(socket.inet_ntoa(packet[offset:rdata_end]))
-                ttl_values.append(ttl)
-            offset = rdata_end
-
-        ttl = min(ttl_values) if ttl_values else self.CACHE_TTL_MIN
-        ttl = max(self.CACHE_TTL_MIN, min(int(ttl), self.CACHE_TTL_MAX))
-        return addresses, ttl
-
-    def _query_udp(self, server, packet, query_id):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.settimeout(self.UDP_TIMEOUT)
-            sock.sendto(packet, (server, 53))
-            response, _ = sock.recvfrom(8192)
-            return self._parse_response(response, query_id)
-        finally:
-            try:
-                sock.close()
-            except Exception:
-                pass
-
-    def _query_tcp(self, server, packet, query_id):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            sock.settimeout(self.TCP_TIMEOUT)
-            sock.connect((server, 53))
-            payload = struct.pack('!H', len(packet)) + packet
-            sock.sendall(payload)
-            header = self._recv_exact(sock, 2)
-            if not header:
-                return [], self.CACHE_TTL_MIN
-            size = struct.unpack('!H', header)[0]
-            response = self._recv_exact(sock, size)
-            return self._parse_response(response, query_id)
-        finally:
-            try:
-                sock.close()
-            except Exception:
-                pass
-
-    @staticmethod
-    def _recv_exact(sock, amount):
-        data = b''
-        while len(data) < amount:
-            block = sock.recv(amount - len(data))
-            if not block:
-                return b''
-            data += block
-        return data
-
     def _query_doh(self, host):
-        """Fallback DoH cifrado sem consultar o DNS padrao do aparelho.
+        """Consulta DNS exclusivamente via HTTPS, sem DNS de texto claro.
 
         A conexao TLS vai direto aos IPs publicos da Cloudflare e preserva SNI
         cloudflare-dns.com; portanto nao existe bootstrap pelo DNS da operadora.
@@ -407,23 +328,6 @@ class CloudflareDNSResolver(object):
 
         self._resolving.active = True
         try:
-            query_id, packet = self._build_query(host)
-            for server in self.SERVERS:
-                try:
-                    addresses, ttl = self._query_udp(server, packet, query_id)
-                    if addresses:
-                        self._save_cache(host, addresses, ttl)
-                        return addresses
-                except Exception:
-                    pass
-            for server in self.SERVERS:
-                try:
-                    addresses, ttl = self._query_tcp(server, packet, query_id)
-                    if addresses:
-                        self._save_cache(host, addresses, ttl)
-                        return addresses
-                except Exception:
-                    pass
             addresses, ttl = self._query_doh(host)
             if addresses:
                 self._save_cache(host, addresses, ttl)
@@ -437,7 +341,7 @@ class CloudflareDNSResolver(object):
             self._cache[host] = (time.time() + ttl, tuple(addresses))
 
     def _patched_getaddrinfo(self, host, port, family=0, type=0, proto=0, flags=0):
-        # Não recursar quando o próprio fallback DoH precisa alcançar cloudflare-dns.com.
+        # Evita recursão enquanto a consulta DoH já está em andamento.
         if getattr(self._resolving, 'active', False):
             return self._native_getaddrinfo(host, port, family, type, proto, flags)
         host_text = self._host_text(host)
@@ -489,16 +393,44 @@ class CloudflareDNSResolver(object):
 _cloudflare_dns = CloudflareDNSResolver()
 
 
+def resolve_cloudflare_addresses(host):
+    """Return IPv4 addresses from the resolver already used by this addon."""
+    return _cloudflare_dns.resolve(host)
+
+
+@contextmanager
+def cloudflare_dns_scope():
+    """Limit the socket resolver override to one outbound request."""
+    with _cloudflare_dns.scoped():
+        yield
+
+
 def install_cloudflare_dns():
     """Marca o resolvedor como ativo; não troca o DNS do sistema nem grava configurações."""
     _cloudflare_dns.mark_active()
     return True
 
 
+def _privacy_request_proxies(proxies=None):
+    """Usa sempre o proxy das configurações; privacidade vazia bloqueia direto."""
+    upstream = configured_upstream_proxy()
+    if upstream:
+        return {'http': upstream, 'https': upstream}
+    if privacy_mode_enabled():
+        raise requests.exceptions.ProxyError(
+            'Modo de privacidade ativo sem um proxy HTTPS valido configurado.'
+        )
+    # Não aceita proxies embutidos na URL da transmissão nem proxy do ambiente.
+    return None
+
+
 def cloudflare_request(method, url, **kwargs):
     """Requisição HTTP limitada ao resolvedor Cloudflare deste addon."""
+    kwargs['proxies'] = _privacy_request_proxies(kwargs.get('proxies'))
     install_cloudflare_dns()
-    with _cloudflare_dns.scoped():
+    import dnscompat
+    with dnscompat.cloudflare_scope():
+        kwargs['proxies'] = _privacy_request_proxies(kwargs.get('proxies'))
         return requests.request(method, url, **kwargs)
 
 
@@ -514,8 +446,13 @@ def cloudflare_session_get(session, url, **kwargs):
     mf_watch. Isso preserva Set-Cookie e keep-alive emitidos normalmente pela
     origem, sem criar login, burlar desafio ou compartilhar credenciais.
     """
+    kwargs['proxies'] = _privacy_request_proxies(kwargs.get('proxies'))
+    if configured_upstream_proxy() or privacy_mode_enabled():
+        # Impede que variáveis HTTP_PROXY/NO_PROXY do sistema alterem a rota.
+        session.trust_env = False
     install_cloudflare_dns()
-    with _cloudflare_dns.scoped():
+    import dnscompat
+    with dnscompat.cloudflare_scope():
         return session.get(url, **kwargs)
 
 
@@ -869,7 +806,7 @@ def _is_hls_jump_candidate(url):
 def _hls_context_copy_options(options):
     copied = {}
     try:
-        for key in ('User-Agent', 'Referer', 'Origin', 'Proxy'):
+        for key in ('User-Agent', 'Referer', 'Origin'):
             value = _opt(options or {}, key, '')
             if value:
                 copied[key] = [value]
@@ -1809,7 +1746,7 @@ def _try_live_hls_jump(failed_url, headers, proxies, watch_id, session_context=N
         if value:
             merged_headers[key] = value
     if not proxies:
-        proxy_value = _trusted_upstream_proxy(_opt(context_options, 'Proxy', ''))
+        proxy_value = configured_upstream_proxy()
         if proxy_value:
             proxies = {'http': proxy_value, 'https': proxy_value}
     try:
@@ -1994,43 +1931,37 @@ def _opt(options, key, default=''):
 
 
 def _trusted_upstream_proxy(value):
-    """Aceita proxy local ou proxy HTTP público com endereço IPv4 global."""
+    """Valida o proxy HTTPS digitado nas configurações do addon."""
     try:
         value = str(value or '').strip()
         if not value:
             return ''
         parsed = urlparse(value)
         host = (parsed.hostname or '').lower()
-        if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password:
+        if parsed.scheme != 'https' or parsed.username or parsed.password:
+            return ''
+        if parsed.path not in ('', '/') or parsed.query or parsed.fragment:
+            return ''
+        if not parsed.port or not 1 <= parsed.port <= 65535:
             return ''
         if host in ('127.0.0.1', 'localhost', '::1'):
             return value
-        # A lista remota não pode apontar o addon para serviços privados da rede.
         import ipaddress
-        address = ipaddress.ip_address(host)
-        if address.version == 4 and address.is_global and parsed.port and 1 <= parsed.port <= 65535:
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            labels = host.rstrip('.').split('.')
+            if len(labels) < 2 or any(
+                    not label or len(label) > 63 or
+                    not re.match(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', label)
+                    for label in labels):
+                return ''
+            return value
+        if address.is_global:
             return value
     except Exception:
         pass
     return ''
-
-
-def _invalidate_public_proxy_cache(value):
-    """Remove da cache do addon o proxy público que acabou de falhar."""
-    try:
-        cache_file = os.path.join(profile, 'proxy_cache.json')
-        with open(cache_file, 'r') as fh:
-            cache = json.load(fh)
-        changed = False
-        for key, data in list(cache.items()):
-            if data.get('proxy') == value:
-                del cache[key]
-                changed = True
-        if changed:
-            with open(cache_file, 'w') as fh:
-                json.dump(cache, fh, indent=2)
-    except Exception:
-        pass
 
 
 def _proxy_target_url(proxy_base, target_url):
@@ -2073,15 +2004,12 @@ def _build_proxy_url(url, options, watch_id='', adaptive_hls=False):
     user_agent = _opt(options, 'User-Agent', DEFAULT_UA)
     referer = _opt(options, 'Referer', '')
     origin = _opt(options, 'Origin', '')
-    upstream_proxy = _trusted_upstream_proxy(_opt(options, 'Proxy', ''))
     if user_agent:
         params['User-Agent'] = user_agent
     if referer:
         params['Referer'] = referer
     if origin:
         params['Origin'] = origin
-    if upstream_proxy:
-        params['Proxy'] = upstream_proxy
     kodi_url = url + ('|' + urlencode(params) if params else '')
     proxy_base = _proxy_base()
     if not proxy_base:
@@ -2238,12 +2166,22 @@ class M3UProxyHandler(BaseHTTPRequestHandler):
 
         try:
             url, options = _split_kodi_url(target_url)
-            upstream_proxy = _trusted_upstream_proxy(_opt(options, 'Proxy', ''))
+            privacy_mode = privacy_mode_enabled()
+            upstream_proxy = configured_upstream_proxy()
+            if privacy_mode and not upstream_proxy:
+                raise requests.exceptions.ProxyError(
+                    'Modo de privacidade exige um proxy HTTPS valido; acesso direto bloqueado.'
+                )
             headers = {
                 'User-Agent': _opt(options, 'User-Agent', DEFAULT_UA),
                 'Referer': _opt(options, 'Referer', ''),
                 'Origin': _opt(options, 'Origin', '')
             }
+            try:
+                import secureurl
+                url = secureurl.play_url(url, headers=headers)
+            except Exception:
+                pass
             # O Kodi/FFmpeg pode usar Range para abrir, validar cache ou
             # retomar objetos fMP4. Preserve a requisição byte a byte para a
             # origem, junto com If-Range quando existir; o CDN então mantém a
@@ -2284,43 +2222,32 @@ class M3UProxyHandler(BaseHTTPRequestHandler):
                         allow_live_jump=not adaptive_hls, use_buffer=not adaptive_hls
                     )
                 except Exception as upstream_error:
-                    # Proxies públicos da lista podem estar offline. Tente a
-                    # mesma requisição pelo DNS Cloudflare interno e remova do
-                    # cache o proxy ruim para a próxima reprodução escolher outro.
-                    fallback_succeeded = False
                     if upstream_proxy:
-                        _invalidate_public_proxy_cache(upstream_proxy)
-                        options = {key: value for key, value in options.items() if key.lower() != 'proxy'}
-                        proxies = None
                         try:
-                            xbmc.log('[FOOTBALL PROXY] Proxy upstream falhou; repetindo HLS pelo Cloudflare interno.', xbmc.LOGWARNING)
+                            failure_status = _response_status_from_exception(upstream_error)
+                            failure_detail = type(upstream_error).__name__
+                            if failure_status:
+                                failure_detail += ' HTTP {}'.format(failure_status)
+                            xbmc.log(
+                                '[FOOTBALL PROXY] Proxy HTTPS configurado falhou ({}); sem fallback direto.'.format(failure_detail),
+                                xbmc.LOGWARNING
+                            )
                         except Exception:
                             pass
-                        try:
-                            hls_object = _fetch_hls_object(
-                                url, headers, proxies=None, expect_playlist=playlist_hint,
-                                watch_id=watch_id, hls_child=hls_child,
-                                allow_live_jump=not adaptive_hls, use_buffer=not adaptive_hls
-                            )
-                        except Exception as direct_error:
-                            upstream_error = direct_error
-                        else:
-                            fallback_succeeded = True
                     # Para a playlist principal, uma falha transitória não
                     # descarta de imediato segmentos que já estão íntegros na
                     # RAM. O proxy devolve a próxima janela local e preserva
                     # a continuidade por alguns ciclos de TARGETDURATION.
-                    if not fallback_succeeded:
-                        if playlist_hint and watch_id:
-                            stale_text, stale_details, stale_base = _hls_stale_buffered_playlist(watch_id)
-                            context = _get_hls_playlist_context(watch_id) or {}
-                            stale_options = context.get('options') or options
-                            if stale_text and stale_base:
-                                _log_hls_buffer_release(watch_id, stale_details, stale=True)
-                                body = _rewrite_playlist(stale_text, stale_base, stale_options, watch_id).encode('utf-8')
-                                self._send_playlist(body, True)
-                                return
-                        raise upstream_error
+                    if playlist_hint and watch_id:
+                        stale_text, stale_details, stale_base = _hls_stale_buffered_playlist(watch_id)
+                        context = _get_hls_playlist_context(watch_id) or {}
+                        stale_options = context.get('options') or options
+                        if stale_text and stale_base:
+                            _log_hls_buffer_release(watch_id, stale_details, stale=True)
+                            body = _rewrite_playlist(stale_text, stale_base, stale_options, watch_id).encode('utf-8')
+                            self._send_playlist(body, True)
+                            return
+                    raise upstream_error
                 source_body = hls_object['body']
                 content_type = hls_object['headers'].get('Content-Type', '')
                 final_url = hls_object['url']

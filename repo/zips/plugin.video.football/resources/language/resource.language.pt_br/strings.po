@@ -1,0 +1,35 @@
+msgctxt "#32000"
+msgid "Rede e privacidade"
+msgstr "Rede e privacidade"
+
+msgctxt "#32001"
+msgid "Configure o transporte de rede usado pelo addon."
+msgstr "Configure o transporte de rede usado pelo addon."
+
+msgctxt "#32002"
+msgid "Proxy upstream criptografado"
+msgstr "Proxy upstream criptografado"
+
+msgctxt "#32003"
+msgid "Modo de privacidade (fail closed)"
+msgstr "Modo de privacidade (fail closed)"
+
+msgctxt "#32004"
+msgid "Quando o campo contiver um proxy HTTPS válido, o addon encaminhará as conexões externas por ele. Ative este modo para bloquear conexões diretas se o proxy estiver vazio, inválido ou falhar. A operadora ainda vê a conexão, duração e volume de tráfego; o provedor do proxy pode ver o destino e metadados."
+msgstr "Quando o campo contiver um proxy HTTPS válido, o addon encaminhará as conexões externas por ele. Ative este modo para bloquear conexões diretas se o proxy estiver vazio, inválido ou falhar. A operadora ainda vê a conexão, duração e volume de tráfego; o provedor do proxy pode ver o destino e metadados."
+
+msgctxt "#32005"
+msgid "Proxy HTTPS (https://host:porta)"
+msgstr "Proxy HTTPS (https://host:porta)"
+
+msgctxt "#32006"
+msgid "Informe um proxy HTTPS de confiança, por exemplo https://proxy.exemplo:443. O addon usará este proxy nas conexões externas. Sem proxy configurado, o tráfego seguirá direto se o modo de privacidade estiver desligado; se estiver ligado, as conexões serão bloqueadas. Não inclua usuário ou senha."
+msgstr "Informe um proxy HTTPS de confiança, por exemplo https://proxy.exemplo:443. O addon usará este proxy nas conexões externas. Sem proxy configurado, o tráfego seguirá direto se o modo de privacidade estiver desligado; se estiver ligado, as conexões serão bloqueadas. Não inclua usuário ou senha."
+
+msgctxt "#32007"
+msgid "Tentar HTTPS nos servidores de stream"
+msgstr "Tentar HTTPS nos servidores de stream"
+
+msgctxt "#32008"
+msgid "Para URLs HTTP públicas em portas padrão, testa se o servidor aceita HTTPS e usa TLS quando disponível. Se não aceitar, mantém a URL original para preservar a reprodução. Para ocultar o destino da operadora nesses casos, configure um proxy HTTPS e ative o modo de privacidade."
+msgstr "Para URLs HTTP públicas em portas padrão, testa se o servidor aceita HTTPS e usa TLS quando disponível. Se não aceitar, mantém a URL original para preservar a reprodução. Para ocultar o destino da operadora nesses casos, configure um proxy HTTPS e ative o modo de privacidade."

@@ -21,7 +21,7 @@
   </extension>
 </addon>
 
-<addon id="plugin.video.football" version="0.0.1" name="FOOTBALL" provider-name="FOOTBALL">
+<addon id="plugin.video.football" version="0.0.2" name="FOOTBALL" provider-name="FOOTBALL">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.six"/>
