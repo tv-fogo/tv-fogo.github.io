@@ -1994,18 +1994,43 @@ def _opt(options, key, default=''):
 
 
 def _trusted_upstream_proxy(value):
-    """Aceita somente proxy local explícito; nunca lista pública/remota."""
+    """Aceita proxy local ou proxy HTTP público com endereço IPv4 global."""
     try:
         value = str(value or '').strip()
         if not value:
             return ''
         parsed = urlparse(value)
         host = (parsed.hostname or '').lower()
-        if parsed.scheme in ('http', 'https') and host in ('127.0.0.1', 'localhost', '::1'):
+        if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password:
+            return ''
+        if host in ('127.0.0.1', 'localhost', '::1'):
+            return value
+        # A lista remota não pode apontar o addon para serviços privados da rede.
+        import ipaddress
+        address = ipaddress.ip_address(host)
+        if address.version == 4 and address.is_global and parsed.port and 1 <= parsed.port <= 65535:
             return value
     except Exception:
         pass
     return ''
+
+
+def _invalidate_public_proxy_cache(value):
+    """Remove da cache do addon o proxy público que acabou de falhar."""
+    try:
+        cache_file = os.path.join(profile, 'proxy_cache.json')
+        with open(cache_file, 'r') as fh:
+            cache = json.load(fh)
+        changed = False
+        for key, data in list(cache.items()):
+            if data.get('proxy') == value:
+                del cache[key]
+                changed = True
+        if changed:
+            with open(cache_file, 'w') as fh:
+                json.dump(cache, fh, indent=2)
+    except Exception:
+        pass
 
 
 def _proxy_target_url(proxy_base, target_url):
@@ -2258,21 +2283,44 @@ class M3UProxyHandler(BaseHTTPRequestHandler):
                         watch_id=watch_id, hls_child=hls_child,
                         allow_live_jump=not adaptive_hls, use_buffer=not adaptive_hls
                     )
-                except Exception:
+                except Exception as upstream_error:
+                    # Proxies públicos da lista podem estar offline. Tente a
+                    # mesma requisição pelo DNS Cloudflare interno e remova do
+                    # cache o proxy ruim para a próxima reprodução escolher outro.
+                    fallback_succeeded = False
+                    if upstream_proxy:
+                        _invalidate_public_proxy_cache(upstream_proxy)
+                        options = {key: value for key, value in options.items() if key.lower() != 'proxy'}
+                        proxies = None
+                        try:
+                            xbmc.log('[FOOTBALL PROXY] Proxy upstream falhou; repetindo HLS pelo Cloudflare interno.', xbmc.LOGWARNING)
+                        except Exception:
+                            pass
+                        try:
+                            hls_object = _fetch_hls_object(
+                                url, headers, proxies=None, expect_playlist=playlist_hint,
+                                watch_id=watch_id, hls_child=hls_child,
+                                allow_live_jump=not adaptive_hls, use_buffer=not adaptive_hls
+                            )
+                        except Exception as direct_error:
+                            upstream_error = direct_error
+                        else:
+                            fallback_succeeded = True
                     # Para a playlist principal, uma falha transitória não
                     # descarta de imediato segmentos que já estão íntegros na
                     # RAM. O proxy devolve a próxima janela local e preserva
                     # a continuidade por alguns ciclos de TARGETDURATION.
-                    if playlist_hint and watch_id:
-                        stale_text, stale_details, stale_base = _hls_stale_buffered_playlist(watch_id)
-                        context = _get_hls_playlist_context(watch_id) or {}
-                        stale_options = context.get('options') or options
-                        if stale_text and stale_base:
-                            _log_hls_buffer_release(watch_id, stale_details, stale=True)
-                            body = _rewrite_playlist(stale_text, stale_base, stale_options, watch_id).encode('utf-8')
-                            self._send_playlist(body, True)
-                            return
-                    raise
+                    if not fallback_succeeded:
+                        if playlist_hint and watch_id:
+                            stale_text, stale_details, stale_base = _hls_stale_buffered_playlist(watch_id)
+                            context = _get_hls_playlist_context(watch_id) or {}
+                            stale_options = context.get('options') or options
+                            if stale_text and stale_base:
+                                _log_hls_buffer_release(watch_id, stale_details, stale=True)
+                                body = _rewrite_playlist(stale_text, stale_base, stale_options, watch_id).encode('utf-8')
+                                self._send_playlist(body, True)
+                                return
+                        raise upstream_error
                 source_body = hls_object['body']
                 content_type = hls_object['headers'].get('Content-Type', '')
                 final_url = hls_object['url']
