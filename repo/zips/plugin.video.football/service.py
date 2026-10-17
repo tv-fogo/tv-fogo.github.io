@@ -7,13 +7,7 @@ def main():
     monitor = xbmc.Monitor()
     started_once = False
     try:
-        privacy_enabled, secure_proxy_ready = localproxy.privacy_status()
-        if secure_proxy_ready:
-            log('Proxy HTTPS configurado; conexões externas serão encaminhadas por ele.')
-        elif privacy_enabled:
-            log('Modo de privacidade ativo sem proxy HTTPS válido; conexões externas serão bloqueadas até configurar um.')
-        else:
-            log('Nenhum proxy HTTPS configurado; conexões externas seguem diretamente.')
+        log('Modo de privacidade sempre ativo: conexões externas exigem HTTPS e usam DNS Cloudflare interno.')
 
         while not monitor.abortRequested():
             try:

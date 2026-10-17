@@ -42,34 +42,39 @@ OWNER_PROPERTY_NAME = 'football.proxy.owner'
 # para porta 0 e grava a nova escolha.
 DYNAMIC_PORT_STATE_FILE = os.path.join(profile, 'dynamic_proxy_port.json')
 
-ADDON_ID = 'plugin.video.football'
-PRIVACY_MODE_SETTING = 'privacy_mode'
-PRIVACY_PROXY_SETTING = 'privacy_proxy_url'
-
-
 def privacy_mode_enabled():
-    """True quando o usuário exige upstream TLS e bloqueio de rota direta."""
+    """O modo HTTPS estrito fica sempre ligado e não depende de preferências."""
+    return True
+
+
+_TLS_SUCCESS_LOG_LOCK = threading.Lock()
+_TLS_SUCCESS_LOG_HOSTS = {}
+_TLS_SUCCESS_LOG_INTERVAL = 60.0
+
+
+def _log_verified_https(response, requested_url):
+    """Log TLS success by host only, throttled to avoid URL/token leakage."""
     try:
-        addon = xbmcaddon.Addon(ADDON_ID)
-        return str(addon.getSetting(PRIVACY_MODE_SETTING) or '').strip().lower() == 'true'
+        final_url = getattr(response, 'url', '') or requested_url
+        parsed = urlparse(final_url)
+        if parsed.scheme.lower() != 'https' or not parsed.hostname:
+            return
+        host = parsed.hostname.lower()
+        now = time.time()
+        with _TLS_SUCCESS_LOG_LOCK:
+            previous = _TLS_SUCCESS_LOG_HOSTS.get(host, 0)
+            if now - previous < _TLS_SUCCESS_LOG_INTERVAL:
+                return
+            _TLS_SUCCESS_LOG_HOSTS[host] = now
+            for cached_host, timestamp in list(_TLS_SUCCESS_LOG_HOSTS.items()):
+                if now - timestamp > 900:
+                    _TLS_SUCCESS_LOG_HOSTS.pop(cached_host, None)
+        xbmc.log(
+            '[FOOTBALL HTTPS] TLS validado para host: {}.'.format(host),
+            xbmc.LOGINFO
+        )
     except Exception:
-        return False
-
-
-def configured_upstream_proxy():
-    """Retorna o proxy HTTPS definido nas configurações do addon, se válido."""
-    try:
-        addon = xbmcaddon.Addon(ADDON_ID)
-        value = str(addon.getSetting(PRIVACY_PROXY_SETTING) or '').strip()
-    except Exception:
-        return ''
-    return _trusted_upstream_proxy(value)
-
-
-def privacy_status():
-    """Resumo sem expor host, porta, credenciais ou URLs nos logs."""
-    enabled = privacy_mode_enabled()
-    return enabled, bool(configured_upstream_proxy())
+        pass
 
 # Canal de diagnóstico entre o proxy de serviço e o processo do plugin.
 # Só armazena motivo técnico resumido; nunca URL, token ou cabeçalho remoto.
@@ -412,26 +417,70 @@ def install_cloudflare_dns():
 
 
 def _privacy_request_proxies(proxies=None):
-    """Usa sempre o proxy das configurações; privacidade vazia bloqueia direto."""
-    upstream = configured_upstream_proxy()
-    if upstream:
-        return {'http': upstream, 'https': upstream}
-    if privacy_mode_enabled():
-        raise requests.exceptions.ProxyError(
-            'Modo de privacidade ativo sem um proxy HTTPS valido configurado.'
+    """Desativa proxies públicos/configurados e exige transporte HTTPS direto."""
+    return {'http': '', 'https': ''}
+
+
+def _https_request_url(url):
+    """Upgrade public HTTP URLs and reject every remaining non-HTTPS URL."""
+    try:
+        import secureurl
+        upgraded = secureurl.to_https(str(url or ''))
+        if urlparse(upgraded).scheme.lower() != 'https':
+            raise requests.exceptions.SSLError(
+                'Modo de privacidade exige HTTPS; o destino nao oferece uma URL publica HTTPS.'
+            )
+        return upgraded
+    except requests.RequestException:
+        raise
+    except Exception as exc:
+        raise requests.exceptions.SSLError(
+            'Nao foi possivel validar uma URL HTTPS: {0}'.format(type(exc).__name__)
         )
-    # Não aceita proxies embutidos na URL da transmissão nem proxy do ambiente.
-    return None
+
+
+def _https_redirect_guard(response, *args, **kwargs):
+    """Keep redirects on TLS by upgrading HTTP Location values before follow."""
+    try:
+        location = response.headers.get('Location', '')
+        if response.is_redirect and location:
+            target = urljoin(response.url or '', location)
+            response.headers['Location'] = _https_request_url(target)
+    except requests.RequestException:
+        try:
+            response.close()
+        except Exception:
+            pass
+        raise
+    return response
+
+
+def _install_https_redirect_guard(kwargs):
+    hooks = kwargs.get('hooks') or {}
+    response_hooks = hooks.get('response', [])
+    if callable(response_hooks):
+        response_hooks = [response_hooks]
+    else:
+        response_hooks = list(response_hooks or [])
+    if _https_redirect_guard not in response_hooks:
+        response_hooks.append(_https_redirect_guard)
+    hooks['response'] = response_hooks
+    kwargs['hooks'] = hooks
 
 
 def cloudflare_request(method, url, **kwargs):
-    """Requisição HTTP limitada ao resolvedor Cloudflare deste addon."""
+    """Requisição externa HTTPS sem proxies e com DNS Cloudflare interno."""
+    url = _https_request_url(url)
     kwargs['proxies'] = _privacy_request_proxies(kwargs.get('proxies'))
+    kwargs['verify'] = TLS_VERIFY
+    _install_https_redirect_guard(kwargs)
     install_cloudflare_dns()
     import dnscompat
     with dnscompat.cloudflare_scope():
-        kwargs['proxies'] = _privacy_request_proxies(kwargs.get('proxies'))
-        return requests.request(method, url, **kwargs)
+        url = _https_request_url(url)
+        response = requests.request(method, url, **kwargs)
+    _log_verified_https(response, url)
+    return response
 
 
 def cloudflare_get(url, **kwargs):
@@ -446,14 +495,18 @@ def cloudflare_session_get(session, url, **kwargs):
     mf_watch. Isso preserva Set-Cookie e keep-alive emitidos normalmente pela
     origem, sem criar login, burlar desafio ou compartilhar credenciais.
     """
+    url = _https_request_url(url)
     kwargs['proxies'] = _privacy_request_proxies(kwargs.get('proxies'))
-    if configured_upstream_proxy() or privacy_mode_enabled():
-        # Impede que variáveis HTTP_PROXY/NO_PROXY do sistema alterem a rota.
-        session.trust_env = False
+    kwargs['verify'] = TLS_VERIFY
+    _install_https_redirect_guard(kwargs)
+    # Impede que variáveis do ambiente alterem a rota sem o usuário saber.
+    session.trust_env = False
     install_cloudflare_dns()
     import dnscompat
     with dnscompat.cloudflare_scope():
-        return session.get(url, **kwargs)
+        response = session.get(_https_request_url(url), **kwargs)
+    _log_verified_https(response, url)
+    return response
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -1745,12 +1798,8 @@ def _try_live_hls_jump(failed_url, headers, proxies, watch_id, session_context=N
         value = _opt(context_options, key, '')
         if value:
             merged_headers[key] = value
-    if not proxies:
-        proxy_value = configured_upstream_proxy()
-        if proxy_value:
-            proxies = {'http': proxy_value, 'https': proxy_value}
     try:
-        xbmc.log('[FOOTBALL PROXY] Segmento HLS oscilou; revalidando playlist para continuidade.', xbmc.LOGINFO)
+        xbmc.log('[FOOTBALL HTTPS] Segmento HLS oscilou; revalidando playlist para continuidade.', xbmc.LOGINFO)
     except Exception:
         pass
     try:
@@ -1928,40 +1977,6 @@ def _split_kodi_url(raw):
 def _opt(options, key, default=''):
     value = options.get(key, [default])
     return value[0] if value else default
-
-
-def _trusted_upstream_proxy(value):
-    """Valida o proxy HTTPS digitado nas configurações do addon."""
-    try:
-        value = str(value or '').strip()
-        if not value:
-            return ''
-        parsed = urlparse(value)
-        host = (parsed.hostname or '').lower()
-        if parsed.scheme != 'https' or parsed.username or parsed.password:
-            return ''
-        if parsed.path not in ('', '/') or parsed.query or parsed.fragment:
-            return ''
-        if not parsed.port or not 1 <= parsed.port <= 65535:
-            return ''
-        if host in ('127.0.0.1', 'localhost', '::1'):
-            return value
-        import ipaddress
-        try:
-            address = ipaddress.ip_address(host)
-        except ValueError:
-            labels = host.rstrip('.').split('.')
-            if len(labels) < 2 or any(
-                    not label or len(label) > 63 or
-                    not re.match(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', label)
-                    for label in labels):
-                return ''
-            return value
-        if address.is_global:
-            return value
-    except Exception:
-        pass
-    return ''
 
 
 def _proxy_target_url(proxy_base, target_url):
@@ -2166,12 +2181,6 @@ class M3UProxyHandler(BaseHTTPRequestHandler):
 
         try:
             url, options = _split_kodi_url(target_url)
-            privacy_mode = privacy_mode_enabled()
-            upstream_proxy = configured_upstream_proxy()
-            if privacy_mode and not upstream_proxy:
-                raise requests.exceptions.ProxyError(
-                    'Modo de privacidade exige um proxy HTTPS valido; acesso direto bloqueado.'
-                )
             headers = {
                 'User-Agent': _opt(options, 'User-Agent', DEFAULT_UA),
                 'Referer': _opt(options, 'Referer', ''),
@@ -2194,7 +2203,7 @@ class M3UProxyHandler(BaseHTTPRequestHandler):
                 headers['If-Range'] = client_if_range
             headers = {k: v for k, v in headers.items() if v}
 
-            proxies = {'http': upstream_proxy, 'https': upstream_proxy} if upstream_proxy else None
+            proxies = None
             playlist_hint = _is_hls_playlist_url(url)
             hls_request = bool(hls_child or playlist_hint)
 
@@ -2222,18 +2231,17 @@ class M3UProxyHandler(BaseHTTPRequestHandler):
                         allow_live_jump=not adaptive_hls, use_buffer=not adaptive_hls
                     )
                 except Exception as upstream_error:
-                    if upstream_proxy:
-                        try:
-                            failure_status = _response_status_from_exception(upstream_error)
-                            failure_detail = type(upstream_error).__name__
-                            if failure_status:
-                                failure_detail += ' HTTP {}'.format(failure_status)
-                            xbmc.log(
-                                '[FOOTBALL PROXY] Proxy HTTPS configurado falhou ({}); sem fallback direto.'.format(failure_detail),
-                                xbmc.LOGWARNING
-                            )
-                        except Exception:
-                            pass
+                    try:
+                        failure_status = _response_status_from_exception(upstream_error)
+                        failure_detail = type(upstream_error).__name__
+                        if failure_status:
+                            failure_detail += ' HTTP {}'.format(failure_status)
+                        xbmc.log(
+                            '[FOOTBALL HTTPS] A requisicao HTTPS falhou ({}); sem fallback para HTTP.'.format(failure_detail),
+                            xbmc.LOGWARNING
+                        )
+                    except Exception:
+                        pass
                     # Para a playlist principal, uma falha transitória não
                     # descarta de imediato segmentos que já estão íntegros na
                     # RAM. O proxy devolve a próxima janela local e preserva

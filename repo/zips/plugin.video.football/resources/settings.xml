@@ -5,22 +5,8 @@
             <group id="privacy" label="32002">
                 <setting id="privacy_mode" type="boolean" label="32003" help="32004">
                     <level>0</level>
-                    <default>false</default>
-                    <control type="toggle" />
-                </setting>
-                <setting id="privacy_proxy_url" type="string" label="32005" help="32006">
-                    <level>0</level>
-                    <default />
-                    <constraints>
-                        <allowempty>true</allowempty>
-                    </constraints>
-                    <control type="edit" format="string">
-                        <heading>32005</heading>
-                    </control>
-                </setting>
-                <setting id="force_https" type="boolean" label="32007" help="32008">
-                    <level>0</level>
                     <default>true</default>
+                    <enable>false</enable>
                     <control type="toggle" />
                 </setting>
             </group>
