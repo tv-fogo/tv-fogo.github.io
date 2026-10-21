@@ -1,0 +1,5 @@
+3.20.0
+Port to Python 3 for Kodi Matrix/Nexus/Omega by bundling Cryptodome and keeping Crypto compatibility namespace
+
+3.4
+First Kodi repackage

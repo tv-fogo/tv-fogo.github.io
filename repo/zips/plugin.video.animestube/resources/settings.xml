@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings>
+  <category label="Reprodução">
+    <setting id="video_quality" type="select" label="Resolução preferida dos vídeos Blogger" values="Máxima disponível|1080p|720p|480p|360p" default="Máxima disponível" />
+    <setting id="use_resolveurl" type="bool" label="Usar ResolveURL para outros players" default="true" />
+  </category>
+</settings>

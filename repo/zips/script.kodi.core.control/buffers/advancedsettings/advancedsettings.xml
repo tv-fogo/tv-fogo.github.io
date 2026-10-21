@@ -1,0 +1,9 @@
+<advancedsettings>
+    <network>
+    <curlclienttimeout>15</curlclienttimeout>
+    <curllowspeedtime>20</curllowspeedtime>
+    <curlretries>5</curlretries>
+    <disablehttp2>false</disablehttp2>
+    <disableipv6>true</disableipv6>
+  </network>
+</advancedsettings>

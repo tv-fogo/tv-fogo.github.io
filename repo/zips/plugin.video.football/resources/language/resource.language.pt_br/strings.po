@@ -1,0 +1,31 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.football\n"
+"PO-Revision-Date: 2026-10-17 09:45-0300\n"
+"Last-Translator: Project contributors\n"
+"Language-Team: Brazilian Portuguese\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgctxt "#32000"
+msgid "Connection"
+msgstr "Conexão"
+
+msgctxt "#32001"
+msgid "The add-on connection mode is fixed for privacy."
+msgstr "O modo de conexão do addon é fixo para manter a privacidade."
+
+msgctxt "#32002"
+msgid "Privacy mode"
+msgstr "Modo de privacidade"
+
+msgctxt "#32003"
+msgid "Privacy mode (always on): HTTPS required"
+msgstr "Modo de privacidade (sempre ativo): HTTPS obrigatório"
+
+msgctxt "#32004"
+msgid "The add-on always requires HTTPS for pages, streams, and redirects. A channel will not play if its server only supports HTTP. No public proxy is configured. HTTPS encrypts the connection contents, but does not make the destination anonymous."
+msgstr "O addon sempre exige HTTPS nas páginas, transmissões e redirecionamentos. Um canal não vai abrir se o servidor aceitar somente HTTP. Nenhum proxy público é configurado. O HTTPS criptografa o conteúdo da conexão, mas não torna anônimo o destino acessado."
