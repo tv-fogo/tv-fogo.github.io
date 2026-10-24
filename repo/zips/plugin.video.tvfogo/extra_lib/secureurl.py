@@ -123,11 +123,25 @@ def to_https(url):
     return 'https://' + base + (sep + rest if sep else '')
 
 
+_logged_ok = set()
+
+
+def _log(msg):
+    """Log no kodi.log (usar: grep "\\[secureurl\\]")."""
+    try:
+        import xbmc
+        xbmc.log('[secureurl] ' + msg, xbmc.LOGINFO)
+    except Exception:
+        pass
+
+
 def _mark_broken(url):
     """Marca o host como sem TLS para nao tentar https de novo."""
     try:
         host = _host_of(url)
         if host:
+            if host not in _broken_hosts:
+                _log('HTTPS FALHOU, voltando para HTTP: %s' % host)
             _broken_hosts.add(host)
     except Exception:
         pass
@@ -169,6 +183,10 @@ def play_url(url):
     if verified is None:
         verified = _probe_https(base)
         _verified_hosts[host] = verified
+        if verified:
+            _log('HTTPS OK (convertido para https): %s' % host)
+        else:
+            _log('HTTPS INDISPONIVEL (mantido em http): %s' % host)
         if not verified:
             _broken_hosts.add(host)
 
@@ -232,6 +250,11 @@ def patch_requests():
                 status = getattr(resp, 'status_code', 200)
                 if status >= 400:
                     _mark_broken(url)
+                else:
+                    host = _host_of(url)
+                    if host and host not in _logged_ok:
+                        _logged_ok.add(host)
+                        _log('HTTPS OK (convertido para https): %s' % host)
                 return resp
             return wrapped
 
