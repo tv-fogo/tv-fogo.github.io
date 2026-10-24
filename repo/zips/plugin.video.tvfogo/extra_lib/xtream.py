@@ -212,15 +212,15 @@ class API:
     
     def regex_from_to(self, text, from_string, to_string, excluding=True):
         if excluding:
-            try: r = re.search("(?i)" + from_string + "([\S\s]+?)" + to_string, text).group(1)
+            try: r = re.search("(?i)" + from_string + r"([\S\s]+?)" + to_string, text).group(1)
             except: r = ''
         else:
-            try: r = re.search("(?i)(" + from_string + "[\S\s]+?" + to_string + ")", text).group(1)
+            try: r = re.search("(?i)(" + from_string + r"[\S\s]+?" + to_string + ")", text).group(1)
             except: r = ''
         return r 
 
     def regex_get_all(self, text, start_with, end_with):
-        r = re.findall("(?i)(" + start_with + "[\S\s]+?" + end_with + ")", text)
+        r = re.findall("(?i)(" + start_with + r"[\S\s]+?" + end_with + ")", text)
         return r       
 
     
@@ -380,7 +380,7 @@ class API:
             doc = xml.dom.minidom.parseString(xml_data)
             if doc:
                 for i, _ in enumerate(doc.getElementsByTagName('channel')):
-                    name = re.sub('\[.*?min ','-',self.b64(doc.getElementsByTagName('title')[i].firstChild.nodeValue))
+                    name = re.sub(r'\[.*?min ','-',self.b64(doc.getElementsByTagName('title')[i].firstChild.nodeValue))
                     url_ = self.check_protocol(doc.getElementsByTagName('stream_url')[i].firstChild.nodeValue).replace('<![CDATA[','').replace(']]>','')
                     stream_id = self.channel_id(json_data,i)
                     url_ = '{0}{1}.m3u8'.format(self.play_url,stream_id)

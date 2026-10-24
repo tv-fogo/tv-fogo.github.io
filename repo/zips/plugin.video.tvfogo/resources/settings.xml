@@ -14,6 +14,7 @@
     <setting id="genesisorpulsar" type="enum" values="Genesis|Pulsar" label="Play IMDBid with:" default="Genesis"/>
     <setting id="donotshowbychannels" label="Do Not show items under channel name" type="bool" default="false"/>
     <setting id="show_adult_categories" label="Mostrar categorias adultas" type="bool" default="false"/>
+    <setting id="json_player" label="Player das listas JSON" type="enum" values="Perguntar sempre|PROXY - HLSRETRY|PROXY - TSDOWNLOADER|PROXY - SERVER 2|INPUTSTREAM FFMPEGDIRECT" default="0"/>
     <setting id="force_https" label="Forcar HTTPS nos streams (criptografa o video contra a operadora)" type="bool" default="true"/>
     <setting id="strict_https" label="Usar HTTPS quando disponivel (nao bloquear HTTP)" type="bool" default="true" />
   </category>

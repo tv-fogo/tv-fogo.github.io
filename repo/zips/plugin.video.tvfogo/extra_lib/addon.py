@@ -86,6 +86,88 @@ def player_tsdownloader(name,url,iconimage,description):
     xbmc.Player().play(item=url, listitem=li)           
     _monitor_local_player(tsdownloader.HOST_NAME, tsdownloader.PORT_NUMBER)
 
+VOD_EXTS = ('.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.mpg', '.mpeg', '.webm')
+VOD_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+
+def is_vod_url(url):
+    try:
+        path = url.split('|')[0].split('?')[0].lower()
+        return path.endswith(VOD_EXTS)
+    except Exception:
+        return False
+
+def player_vod(name, url, iconimage, description, ffmpegdirect=False):
+    # Filmes e series (mp4/mkv/avi...): os proxies HLS/TS nao servem para arquivos,
+    # entao resolve o redirect (DoH + User-Agent de navegador) e toca o link final.
+    try:
+        from extra_lib.dnscompat import DNSOverride
+    except Exception:
+        from dnscompat import DNSOverride
+    try:
+        from extra_lib.secureurl import play_url as secure_play_url
+    except Exception:
+        from secureurl import play_url as secure_play_url
+    from urllib.parse import urlparse, unquote_plus
+    import requests as _rq
+
+    dns_resolver = DNSOverride()
+    url = unquote_plus(url).split('|')[0]
+    url = secure_play_url(url)
+    final_url = url
+    try:
+        _r = _rq.get(url, headers={'User-Agent': VOD_UA}, stream=True,
+                     timeout=(5, 10), allow_redirects=True, verify=False)
+        if _r.url and _r.url.startswith('http'):
+            final_url = _r.url
+        try:
+            _r.close()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    title = ('TV FOGO - ' + name) if name else 'TV FOGO'
+    play_url = '{0}|User-Agent={1}&Connection=keep-alive'.format(final_url, VOD_UA)
+    play_item = xbmcgui.ListItem(title, path=play_url)
+    play_item.setArt({"icon": "DefaultVideo.png", "thumb": iconimage or ""})
+    set_video_info(play_item, title=title, plot=description)
+    play_item.setProperty("IsPlayable", "true")
+
+    ext = final_url.split('|')[0].split('?')[0].lower().rsplit('.', 1)[-1]
+    mimes = {'mp4': 'video/mp4', 'm4v': 'video/mp4', 'mkv': 'video/x-matroska',
+             'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'webm': 'video/webm'}
+    if ext in mimes:
+        play_item.setMimeType(mimes[ext])
+    play_item.setContentLookup(False)
+
+    if ffmpegdirect:
+        play_item.setProperty('inputstream', 'inputstream.ffmpegdirect')
+        play_item.setProperty('inputstream.ffmpegdirect.open_mode', 'curl')
+        play_item.setProperty('inputstream.ffmpegdirect.is_realtime_stream', 'false')
+        play_item.setProperty('inputstream.ffmpegdirect.user_agent', VOD_UA)
+        play_item.setProperty('inputstream.ffmpegdirect.curl_option.followlocation', '1')
+        play_item.setProperty('inputstream.ffmpegdirect.curl_option.ipresolve', '1')
+        play_item.setProperty('inputstream.ffmpegdirect.curl_option.ssl_verifypeer', '0')
+        play_item.setProperty('inputstream.ffmpegdirect.curl_option.ssl_verifyhost', '0')
+        play_item.setProperty('inputstream.ffmpegdirect.curl_option.connecttimeout', '15')
+        play_item.setProperty('inputstream.ffmpegdirect.reconnect_on_error', 'true')
+        play_item.setProperty('inputstream.ffmpegdirect.reconnect_delay_max', '5')
+        play_item.setProperty('inputstream.ffmpegdirect.reconnect_on_http_error', '4xx,5xx')
+        try:
+            parsed = urlparse(final_url)
+            domain = parsed.hostname
+            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+            if domain and not dns_resolver.is_valid_ipv4(domain):
+                ip = dns_resolver.resolve(domain)
+                if ip:
+                    play_item.setProperty('inputstream.ffmpegdirect.curl_option.resolve',
+                                          '{0}:{1}:{2}'.format(domain, port, ip))
+        except Exception:
+            pass
+
+    xbmc.Player().play(item=play_url, listitem=play_item)
+
+
 def player_input(name, url, iconimage, description):
     try:
         from extra_lib.dnscompat import DNSOverride
@@ -226,7 +308,6 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.is_realtime_stream', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.open_mode', 'curl')
                 play_item.setProperty('inputstream.ffmpegdirect.stream_mode', 'timeshift')
-               #play_item.setProperty('inputstream.ffmpegdirect.chunk_size', '67108864')
                 play_item.setProperty('inputstream.ffmpegdirect.buffer_mode', 'adaptive')
                 play_item.setProperty('inputstream.ffmpegdirect.cache', 'true')
                 play_item.setProperty('inputstream.ffmpegdirect.protocol_whitelist', 'http,https,tcp,tls,crypto')
@@ -244,8 +325,6 @@ def player_input(name, url, iconimage, description):
                 play_item.setProperty('inputstream.ffmpegdirect.curl_option.low_speed_time', '60')
                 play_item.setProperty('inputstream.ffmpegdirect.manifest_update_parameter', 'full')
                 play_item.setProperty('inputstream.ffmpegdirect.read_full_manifest', 'true')
-                play_item.setProperty('inputstream.ffmpegdirect.min_buffer_time', '20')
-                play_item.setProperty('inputstream.ffmpegdirect.max_buffer_time', '60')
                 item.setContentLookup(False)
 
             elif '.ts' in url or 'format=ts' in url:
@@ -397,6 +476,19 @@ def run(params):
         return
 
     stream_type = (stream_type or "").upper()
+    if is_vod_url(url):
+        # filmes/series: menu proprio (proxies de TV ao vivo nao abrem arquivos)
+        if stream_type == "FFMPEGDIRECT":
+            player_vod(name, url, iconimage, description, ffmpegdirect=True)
+        elif stream_type in ("HLSRETRY", "TSDOWNLOADER", "SERVER2", "SERVER_2", "PROXY2", "DIRECT"):
+            player_vod(name, url, iconimage, description)
+        else:
+            op = select("SELECT PLAYER", ["DIRETO - KODI", "INPUTSTREAM FFMPEGDIRECT"])
+            if op == 0:
+                player_vod(name, url, iconimage, description)
+            elif op == 1:
+                player_vod(name, url, iconimage, description, ffmpegdirect=True)
+        return
     if stream_type == "HLSRETRY":
         player_hlsretry(name, url, iconimage, description)
         return

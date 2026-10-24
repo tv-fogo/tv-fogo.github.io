@@ -17,7 +17,10 @@ except Exception:
 try:
     from extra_lib.customdns import main as server
 except Exception:
-    from customdns import main as server
+    try:
+        from customdns import main as server
+    except Exception:
+        server = None
 
 
 class DnsServiceMonitor(xbmc.Monitor):
@@ -41,7 +44,12 @@ monitor = DnsServiceMonitor()
 try:
     # Bloqueia aqui rodando o proxy; o main() sai em até ~1s quando o
     # Kodi setar abort (fechar/reiniciar), encerrando tudo limpo.
-    server(monitor=monitor)
+    if server is not None:
+        server(monitor=monitor)
+    else:
+        # sem proxy DNS: apenas aguarda o Kodi encerrar (servico nao pode sair com erro)
+        while not monitor.waitForAbort(5):
+            pass
 finally:
     log_fim = "[customdns] service.py do Tv Fogo finalizado."
     try:
