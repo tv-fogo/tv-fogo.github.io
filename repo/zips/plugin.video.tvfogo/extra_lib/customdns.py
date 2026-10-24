@@ -92,10 +92,32 @@ def _query_doh_endpoint(url, domain):
         return json.loads(response.read().decode('utf-8'))
     return None
 
+_proxy_lock = threading.Lock()
+_proxy_started = False
+
+def _ensure_proxy():
+    """Inicia o proxy local (proxy.py) na primeira chamada do DoH."""
+    global _proxy_started
+    if _proxy_started:
+        return
+    with _proxy_lock:
+        if _proxy_started:
+            return
+        _proxy_started = True
+    try:
+        try:
+            from extra_lib import proxy as _proxy
+        except ImportError:
+            import proxy as _proxy
+        _proxy.start_background()
+    except Exception as e:
+        log(f"[PROXY] Falha ao iniciar o proxy: {e}")
+
 def resolve_via_doh(domain):
     """Resolve o nome de domínio usando DNS-over-HTTPS (Cloudflare com fallback Google).
     Retorna estritamente endereço IPv4.
     """
+    _ensure_proxy()
     if is_private_host(domain):
         return domain
 
