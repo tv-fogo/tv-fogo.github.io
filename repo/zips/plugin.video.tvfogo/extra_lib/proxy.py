@@ -434,7 +434,7 @@ def _install_requests_shim():
     requests.Session._tvfogo_proxy_shim = True
 
 
-def start_background():
+def start_background(monitor=None):
     """Sobe o proxy em uma thread daemon e instala o ajuste do requests.
     Idempotente: só inicia uma vez por processo, mesmo que service.py e
     customdns.py chamem."""
@@ -444,7 +444,7 @@ def start_background():
             return
         _bg_started = True
     _install_requests_shim()
-    threading.Thread(target=main, name='proxy-doh', daemon=True).start()
+    threading.Thread(target=main, kwargs={'monitor': monitor}, name='proxy-doh', daemon=True).start()
 
 
 if __name__ == '__main__':

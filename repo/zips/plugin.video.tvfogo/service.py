@@ -43,7 +43,7 @@ try:
     # Sobe o proxy (idempotente: o customdns também o inicia na primeira
     # consulta DoH) e mantém o serviço vivo até o Kodi pedir encerramento.
     if start_proxy is not None:
-        start_proxy()
+        start_proxy(monitor)
     while not monitor.waitForAbort(5):
         pass
 finally:
