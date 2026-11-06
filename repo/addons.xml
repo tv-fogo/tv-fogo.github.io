@@ -190,7 +190,7 @@
   </extension>
 </addon>
 
-<addon id="script.module.inputstreamhelper" name="InputStream Helper" version="0.8.5" provider-name="emilsvennesson, dagwieers, mediaminister, horstle">
+<addon id="script.module.inputstreamhelper" name="InputStream Helper" version="0.8.6" provider-name="emilsvennesson, dagwieers, mediaminister, horstle">
   <requires>
     <!--py3 compliant-->
     <import addon="xbmc.python" version="3.0.0"/>
@@ -218,6 +218,9 @@
     <description lang="ru_RU">Простой модуль для Kodi, который облегчает жизнь разработчикам дополнений, с использованием InputStream дополнений и воспроизведения DRM контента.</description>
     <description lang="sv_SE">En enkel Kodi-modul som underlättar livet för tilläggsutvecklare som förlitar sig på InputStream-baserade tillägg och DRM-uppspelning.</description>
     <news>
+v0.8.6 (2026-08-24)
+- Enable Widevine CDM installation from repo on 64-bit ARM
+
 v0.8.5 (2025-12-29)
 - Fix Widevine CDM installation on 32-bit ARM
 
@@ -273,6 +276,7 @@ v0.5.9 (2022-03-22)
     </assets>
   </extension>
 </addon>
+
 <addon id="script.module.websocket" name="websocket-client" version="1.6.4" provider-name="liris">
   <requires>
     <import addon="xbmc.python" version="3.0.0" />
@@ -689,6 +693,24 @@ Agora compatível com o Kodi 21.3 e versões superiores.
     8.2.1
     - Updated Streamlink to 7.2.0
     </news>
+    <assets>
+      <icon>resources/icon.png</icon>
+    </assets>
+  </extension>
+</addon>
+
+<addon id="script.module.soupsieve" name="soupsieve" version="2.4.1" provider-name="Isaac Muse">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.module" library="lib" />
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">A modern CSS selector implementation for Beautiful Soup.</summary>
+    <description lang="en_GB">A modern CSS selector implementation for Beautiful Soup.</description>
+    <license>MIT</license>
+    <platform>all</platform>
+    <website>https://facelessuser.github.io/soupsieve/</website>
+    <source>https://github.com/facelessuser/soupsieve</source>
     <assets>
       <icon>resources/icon.png</icon>
     </assets>
